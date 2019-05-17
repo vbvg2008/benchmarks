@@ -41,4 +41,5 @@ example_per_sec = 100*128/average_time
 
 print("training speed is %f examples/sec" % example_per_sec)
 
-#example per second is 35494/sec
+#example per second is 35494/sec in tf-1.13.1
+#example per second is 42947/sec in tf-2.0

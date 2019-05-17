@@ -19,4 +19,4 @@ model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=
 model.fit(train_images, train_labels, epochs=30, validation_data=(test_images, test_labels), batch_size=128)
 
 
-#41666 examples/sec
+#43478 examples/sec
