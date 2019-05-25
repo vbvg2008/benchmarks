@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import random
 
-data_dir = "/data/data/Other/ImageNet/train"
+data_dir = "/data/data/Other/ImageNet/val"
 file_name = "val.csv"
 
 
@@ -23,9 +23,9 @@ for i in range(len(folder_names)):
 print(len(images))
 print(len(labels))
 
-# zipped_list = list(zip(images,labels))
-# random.shuffle(zipped_list)
+zipped_list = list(zip(images,labels))
+random.shuffle(zipped_list)
 
-# df = pd.DataFrame(zipped_list, columns = ["image", "label"])
-# df.to_csv(file_name, index=False)
+df = pd.DataFrame(zipped_list, columns = ["image", "label"])
+df.to_csv(file_name, index=False)
 
