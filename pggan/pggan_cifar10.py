@@ -2,9 +2,11 @@ import os
 import tempfile
 
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.python.keras import backend, layers
 
 import fastestimator as fe
-import tensorflow as tf
 from fastestimator.dataset.nih_chestxray import load_data
 from fastestimator.op import TensorOp
 from fastestimator.op.numpyop import ImageReader
@@ -14,8 +16,6 @@ from fastestimator.schedule import Scheduler
 from fastestimator.trace import ModelSaver, Trace
 from fastestimator.util.record_writer import RecordWriter
 from pggan_architecture import build_D, build_G
-from tensorflow.keras.models import load_model
-from tensorflow.python.keras import backend, layers
 
 
 class Rescale(TensorOp):
@@ -28,12 +28,13 @@ class Rescale(TensorOp):
 
 class CreateLowRes(TensorOp):
     def forward(self, data, state):
-        data_shape =  tf.shape(data)
+        data_shape = tf.shape(data)
         height = data_shape[0]
         width = data_shape[1]
-        data = tf.image.resize(data, (height/2, width/2))
+        data = tf.image.resize(data, (height / 2, width / 2))
         data = tf.image.resize(data, (height, width))
         return data
+
 
 class RandomInput(TensorOp):
     def forward(self, data, state):
@@ -44,32 +45,14 @@ class RandomInput(TensorOp):
 
 
 class ImageBlender(TensorOp):
-    def __init__(self, blend_start, alpha, inputs=None, outputs=None, mode=None):
-        self.blend_start = blend_start
-        self.alpha = alpha
+    def __init__(self, alpha, inputs=None, outputs=None, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self._idx = 0
-
+        self.alpha = alpha
 
     def forward(self, data, state):
         image, image_lowres = data
-        blend_epoch = self.blend_start[self._idx]
-        if state["epoch"] == blend_epoch:
- 
-            self.nimg_total =  blend_duration * state["num_examples"]
-            self.nimg_so_far= 0.0
-        elif state["epoch"] == blend_epoch + blend_duration:
-            self.blend = False
-            self._idx += 1
-
-        if self.blend:
-            self.nimg_so_far += state["batch_size"]
-            current_alpha = self.nimg_so_far / self.nimg_total
-            new_img = current_alpha * image + (1-current_alpha) * image_lowres
-        else:
-            current_alpha = 1.0
-            new_img = image
-        return new_img, current_alpha
+        new_img = self.alpha * image + (1 - self.alpha) * image_lowres
+        return new_img
 
 
 class Interpolate(TensorOp):
@@ -121,35 +104,36 @@ class DLoss(Loss):
 
 
 class AlphaController(Trace):
-    def __init__(self, alpha_models, interval):
+    def __init__(self, alpha, fade_start, duration):
         super().__init__(inputs=None, outputs=None, mode="train")
-        self.alpha_models = alpha_models
-        self.interval = interval
+        self.alpha = alpha
+        self.fade_start = fade_start
+        self.duration = duration
         self.change_alpha = False
         self._idx = 0
 
     def on_epoch_begin(self, state):
         # check whetehr the current epoch is in smooth transition of resolutions
-        current_key = list(self.alpha_models.keys())[self._idx]
-        if state["epoch"] == current_key:
-            self.nimg_total = self.interval * state["num_examples"]
+        fade_epoch = self.fade_start[self._idx]
+        if state["epoch"] == fade_epoch:
+            self.nimg_total = self.duration[self._idx] * state["num_examples"]
             self.change_alpha = True
-            self.model_names = self.alpha_models[current_key]
             self.nimg_so_far = 0
-            print("FastEstimator-Alpha: Started fading in for {}".format(self.model_names))
-        else:
-            if state["epoch"] == current_key + self.interval:
-                print("FastEstimator-Alpha: Finished fading in for {}".format(self.model_names))
-                self.change_alpha = False
-                self._idx += 1
+            print("FastEstimator-Alpha: Started fading in")
+        elif state["epoch"] == fade_epoch + self.duration[self._idx]:
+            print("FastEstimator-Alpha: Finished fading in")
+            self.change_alpha = False
+            self._idx += 1
+            for alpha in self.alpha:
+                backend.set_value(alpha, 1.0)
 
     def on_batch_begin(self, state):
         # if in resolution transition, smoothly change the alpha from 0 to 1
         if self.change_alpha:
             self.nimg_so_far += state["batch_size"]
             current_alpha = np.float32(self.nimg_so_far / self.nimg_total)
-            for model_name in self.model_names:
-                backend.set_value(self.network.model[model_name].alpha, current_alpha)
+            for alpha in self.alpha:
+                backend.set_value(alpha, current_alpha)
 
 
 def get_estimator():
@@ -171,12 +155,15 @@ def get_estimator():
     })
 
     # In Pipeline, we use the schedulers for batch_size and ops.
-    pipeline = fe.Pipeline(batch_size=batchsize_scheduler,
-                            data=writer,
-                            ops=[resize_scheduler,
-                                CreateLowRes(inputs="x", outputs="x_lowres"),
-                                Rescale(inputs="x", outputs="x"),
-                                Rescale(inputs="x_lowres", outputs="x_lowres")])
+    pipeline = fe.Pipeline(
+        batch_size=batchsize_scheduler,
+        data=writer,
+        ops=[
+            resize_scheduler,
+            CreateLowRes(inputs="x", outputs="x_lowres"),
+            Rescale(inputs="x", outputs="x"),
+            Rescale(inputs="x_lowres", outputs="x_lowres")
+        ])
 
     d2, d3, d4, d5 = fe.build(model_def=lambda:build_D(target_resolution=5),
                             model_name=["d2", "d3", "d4", "d5"],
@@ -212,10 +199,10 @@ def get_estimator():
     })
 
     real_score_scheduler = Scheduler({
-        0: ModelOp(inputs="x_blend", model=d2, outputs="real_score"),
-        5: ModelOp(inputs="x_blend", model=d3, outputs="real_score"),
-        15: ModelOp(inputs="x_blend", model=d4, outputs="real_score"),
-        25: ModelOp(inputs="x_blend", model=d5, outputs="real_score")
+        0: ModelOp(model=d2, outputs="real_score"),
+        5: ModelOp(model=d3, outputs="real_score"),
+        15: ModelOp(model=d4, outputs="real_score"),
+        25: ModelOp(model=d5, outputs="real_score")
     })
 
     d_interp_scheduler = Scheduler({
@@ -229,7 +216,7 @@ def get_estimator():
         RandomInput(inputs=lambda: 512),
         g_scheduler,
         fake_score_scheduler,
-        ImageBlender(inputs=("x", "x_lowres"), blend_start=(5, 15, 25), alpha=(d3.alpha, d4.alpha, d5.alpha), outputs="x_blend"),
+        ImageBlender(inputs=("x", "x_lowres"), alpha=d3.alpha),
         real_score_scheduler,
         Interpolate(inputs=("x_fake", "x"), outputs="x_interp"),
         d_interp_scheduler,
@@ -238,10 +225,9 @@ def get_estimator():
         DLoss(inputs=("real_score", "fake_score", "gp"), outputs="dloss")
     ])
 
-    alpha_models = {5: ["g3", "d3"], 15: ["g4", "d4"], 25: ["g5", "d5"]}
-
-    estimator = fe.Estimator(network=network,
-                             pipeline=pipeline,
-                             epochs=35,
-                             traces=AlphaController(alpha_models=alpha_models, interval=5))
+    estimator = fe.Estimator(
+        network=network,
+        pipeline=pipeline,
+        epochs=35,
+        traces=AlphaController(alpha=[d3.alpha, g3.alpha], fade_start=[5, 15, 25], duration=[5, 5, 5]))
     return estimator

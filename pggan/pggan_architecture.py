@@ -12,9 +12,9 @@ def nf(stage):
 
 
 class FadeIn(layers.Add):
-    def __init__(self, alpha=0.0, **kwargs):
+    def __init__(self, alpha, **kwargs):
         super().__init__(**kwargs)
-        self.alpha = tf.Variable(initial_value=0.0, dtype='float32', trainable=False)
+        self.alpha = alpha
 
     def _merge_function(self, inputs):
         assert len(inputs) == 2, "FadeIn only supports two layers"
@@ -148,12 +148,13 @@ def build_G(latent_dim=512, initial_resolution=2, target_resolution=10):
     curr_to_rgb_block = torgb(initial_resolution)
     images_out = curr_g_block(x0)
     images_out = curr_to_rgb_block(images_out)
+    alpha = tf.Variable(initial_value=1.0, dtype='float32', trainable=False)
 
     model_list = list()
     gen_block_list = list()
 
     mdl = Model(inputs=x0, outputs=images_out)
-    mdl.alpha = tf.convert_to_tensor(1.0)
+    mdl.alpha = alpha
     model_list.append(mdl)
 
     gen_block_list.append(curr_g_block)
@@ -175,11 +176,9 @@ def build_G(latent_dim=512, initial_resolution=2, target_resolution=10):
         prev_images = prev_to_rgb_block(prev_images)
         prev_images = layers.UpSampling2D(name="upsample_%dx%d" % (2**res, 2**res))(prev_images)
 
-        fade_in = FadeIn(alpha=0.0, name="fade_in_%dx%d" % (2**res, 2**res))
-
-        images_out = fade_in([prev_images, curr_images])
+        images_out = FadeIn(alpha=alpha, name="fade_in_%dx%d" % (2**res, 2**res))([prev_images, curr_images])
         mdl = Model(inputs=x0, outputs=images_out)
-        mdl.alpha = fade_in.alpha
+        mdl.alpha = alpha
         model_list.append(mdl)
         gen_block_list.append(curr_g_block)
 
@@ -187,7 +186,6 @@ def build_G(latent_dim=512, initial_resolution=2, target_resolution=10):
         prev_to_rgb_block = curr_to_rgb_block
 
     # build final model
-    final_output = x0
     x = x0
     for g in gen_block_list:
         x = g(x)
@@ -239,6 +237,7 @@ def block_D(res, mbstd_group_size=4):
 def build_D(target_resolution=10):
     model_list = list()
     disc_block_list = list()
+    alpha = tf.Variable(initial_value=1.0, dtype='float32', trainable=False)
     for res in range(2, target_resolution + 1):
         x0 = layers.Input(shape=(2**res, 2**res, 3))
         curr_from_rgb = fromrgb(res)
@@ -250,17 +249,15 @@ def build_D(target_resolution=10):
         if res > 2:
             x_ds = layers.AveragePooling2D(name="downsample_%dx%d" % (2**res, 2**res))(x0)
             x_ds = prev_from_rgb(x_ds)
-            fade_in = FadeIn(alpha=0.0, name="fade_in_%dx%d" % (2**res, 2**res))
-            x = fade_in([x_ds, x])
+            x = FadeIn(alpha=alpha, name="fade_in_%dx%d" % (2**res, 2**res))([x_ds, x])
             for prev_d in disc_block_list[::-1]:
                 x = prev_d(x)
-
             mdl = Model(inputs=x0, outputs=x)
             mdl.alpha = fade_in.alpha
             model_list.append(mdl)
         else:
             mdl = Model(inputs=x0, outputs=x)
-            mdl.alpha = tf.convert_to_tensor(1.0)
+            mdl.alpha = alpha
             model_list.append(mdl)
 
         disc_block_list.append(curr_D_block)
