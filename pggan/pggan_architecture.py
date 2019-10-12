@@ -115,13 +115,13 @@ def block_G(res, latent_dim=512, num_channels=3, target_res=10):
         #         x = layers.Dense(units=nf(res - 1) * 16)(x)
         x = EqualizedLRDense(units=nf(res - 1) * 16, gain=np.sqrt(2) / 4)(x)
         x = tf.reshape(x, [-1, 4, 4, nf(res - 1)])
-        x = ApplyBias()(x)
+        # x = ApplyBias()(x)
         x = layers.LeakyReLU(alpha=0.2)(x)
         x = PixelNormalization()(x)
 
         #         x = layers.Conv2D(filters=nf(res - 1), kernel_size=3, padding="same")(x)
         x = EqualizedLRConv2D(filters=nf(res - 1))(x)
-        x = ApplyBias()(x)
+        # x = ApplyBias()(x)
         x = layers.LeakyReLU(alpha=0.2)(x)
         x = PixelNormalization()(x)
     else:
@@ -130,7 +130,7 @@ def block_G(res, latent_dim=512, num_channels=3, target_res=10):
         for _ in range(2):
             #             x = layers.Conv2D(filters=nf(res - 1), kernel_size=3, padding="same")(x)
             x = EqualizedLRConv2D(filters=nf(res - 1))(x)
-            x = ApplyBias()(x)
+            # x = ApplyBias()(x)
             x = layers.LeakyReLU(alpha=0.2)(x)
             x = PixelNormalization()(x)
     return Model(inputs=x0, outputs=x, name="g_block_%dx%d" % (2**res, 2**res))
@@ -140,7 +140,7 @@ def torgb(res, num_channels=3):  # res = 2..resolution_log2
     x0 = layers.Input(shape=(2**res, 2**res, nf(res - 1)))
     #     x = layers.Conv2D(filters=num_channels, kernel_size=1, padding="same")(x0)
     x = EqualizedLRConv2D(filters=num_channels, kernel_size=1, gain=1.0)(x0)
-    x = ApplyBias()(x)
+    # x = ApplyBias()(x)
     return Model(inputs=x0, outputs=x, name="to_rgb_%dx%d" % (2**res, 2**res))
 
 
@@ -201,7 +201,7 @@ def fromrgb(res, num_channels=3):
     x0 = layers.Input(shape=(2**res, 2**res, num_channels))
     #     x = layers.Conv2D(filters=nf(res - 1), kernel_size=1, padding="same")(x0)
     x = EqualizedLRConv2D(filters=nf(res - 1), kernel_size=1)(x0)
-    x = ApplyBias()(x)
+    # x = ApplyBias()(x)
     x = layers.LeakyReLU(alpha=0.2)(x)
     return Model(inputs=x0, outputs=x, name="from_rgb_%dx%d" % (2**res, 2**res))
 
@@ -213,7 +213,7 @@ def block_D(res, mbstd_group_size=4):
         for i in range(2):
             #             x = layers.Conv2D(filters=nf(res - (i + 1)), kernel_size=3, padding="same")(x)
             x = EqualizedLRConv2D(filters=nf(res - (i + 1)))(x)
-            x = ApplyBias()(x)
+            # x = ApplyBias()(x)
             x = layers.LeakyReLU(alpha=0.2)(x)
         x = layers.AveragePooling2D()(x)
     else:
@@ -221,18 +221,18 @@ def block_D(res, mbstd_group_size=4):
             x = MiniBatchStd(mbstd_group_size)(x0)
             #             x = layers.Conv2D(filters=nf(res - 1), kernel_size=3, padding="same")(x)
             x = EqualizedLRConv2D(filters=nf(res - 1))(x)
-            x = ApplyBias()(x)
+            # x = ApplyBias()(x)
             x = layers.LeakyReLU(alpha=0.2)(x)
 
             x = layers.Flatten()(x)
             #             x = layers.Dense(units=nf(res - 2))(x)
             x = EqualizedLRDense(units=nf(res - 2))(x)
-            x = ApplyBias()(x)
+            # x = ApplyBias()(x)
             x = layers.LeakyReLU(alpha=0.2)(x)
 
             #             x = layers.Dense(units=1)(x)
             x = EqualizedLRDense(units=1, gain=1.0)(x)
-            x = ApplyBias()(x)
+            # x = ApplyBias()(x)
     return Model(inputs=x0, outputs=x, name="d_block_%dx%d" % (2**res, 2**res))
 
 

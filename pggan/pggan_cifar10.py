@@ -257,7 +257,7 @@ def get_estimator():
         pipeline=pipeline,
         epochs=35,
         traces=[
-            AlphaController(alpha=[d3.alpha, g3.alpha], fade_start=[5, 15, 25], duration=[5, 5, 5]),
+            AlphaController(alpha=[d3.alpha, g3.alpha], fade_start=[5, 15, 25, 35], duration=[5, 5, 5, 5]),
             ImageSaving(epoch_model={
                 4: "g2", 14: "g3", 24: "g4", 34: "g5"
             }, save_dir="/data/Xiaomeng/images")
