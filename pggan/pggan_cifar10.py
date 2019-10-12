@@ -1,12 +1,11 @@
 import os
 import tempfile
 
+import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from tensorflow.python.keras import backend, layers
 
 import fastestimator as fe
+import tensorflow as tf
 from fastestimator.dataset.nih_chestxray import load_data
 from fastestimator.op import TensorOp
 from fastestimator.op.numpyop import ImageReader
@@ -16,6 +15,8 @@ from fastestimator.schedule import Scheduler
 from fastestimator.trace import ModelSaver, Trace
 from fastestimator.util.record_writer import RecordWriter
 from pggan_architecture import build_D, build_G
+from tensorflow.keras.models import load_model
+from tensorflow.python.keras import backend, layers
 
 
 class Rescale(TensorOp):
@@ -136,6 +137,32 @@ class AlphaController(Trace):
                 backend.set_value(alpha, current_alpha)
 
 
+class ImageSaving(Trace):
+    def __init__(self, epoch_model, save_dir, num_sample=16, latent_dim=512):
+        super().__init__(inputs=None, outputs=None, mode="train")
+        self.epoch_model = epoch_model
+        self.save_dir = save_dir
+        self.latent_dim = latent_dim
+        self.num_sample = num_sample
+        self.random_vectors = tf.random.normal([self.num_sample, self.latent_dim])
+
+    def on_epoch_end(self, state):
+        if state["epoch"] in self.epoch_model:
+            model_name = self.epoch_model[state["epoch"]]
+            model = self.network.model[model_name]
+            pred = model(self.random_vectors)
+            eps = 1e-8
+            fig = plt.figure(figsize=(4, 4))
+            for i in range(pred.shape[0]):
+                plt.subplot(4, 4, i + 1)
+                disp_img = pred[i].numpy()
+                disp_img -= disp_img.min()
+                disp_img /= (disp_img.max() + eps)
+                plt.imshow(disp_img)
+            plt.savefig(os.path.join(self.save_dir, 'image_at_{:08d}.png').format(state["epoch"]))
+            print("on epoch {}, saving image to {}".format(state["epoch"], self.save_dir))
+
+
 def get_estimator():
     train_csv, data_path = load_data()
     writer = RecordWriter(
@@ -144,7 +171,7 @@ def get_estimator():
         ops=[ImageReader(inputs="x", parent_path=data_path), ResizeRecord(target_size=(128, 128), outputs="x")])
 
     # We create a scheduler for batch_size with the epochs at which it will change and corresponding values.
-    batchsize_scheduler = Scheduler({0: 128, 25: 32})
+    batchsize_scheduler = Scheduler({0: 64, 5: 32, 15: 16, 25: 8, 35: 4})
 
     # We create a scheduler for the Resize ops.
     resize_scheduler = Scheduler({
@@ -229,5 +256,10 @@ def get_estimator():
         network=network,
         pipeline=pipeline,
         epochs=35,
-        traces=AlphaController(alpha=[d3.alpha, g3.alpha], fade_start=[5, 15, 25], duration=[5, 5, 5]))
+        traces=[
+            AlphaController(alpha=[d3.alpha, g3.alpha], fade_start=[5, 15, 25], duration=[5, 5, 5]),
+            ImageSaving(epoch_model={
+                4: "g2", 14: "g3", 24: "g4", 34: "g5"
+            }, save_dir="/data/Xiaomeng/images")
+        ])
     return estimator

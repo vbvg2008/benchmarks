@@ -1,4 +1,5 @@
 import numpy as np
+
 import tensorflow as tf
 from tensorflow.keras import Model, layers
 
@@ -85,8 +86,9 @@ class EqualizedLRConv2D(layers.Conv2D):
             if input_shape.dims[channel_axis].value is None:
                 raise ValueError('The channel dimension of the inputs ' 'should be defined. Found `None`.')
         super().build(input_shape)
-        input_dim = int(input_shape[channel_axis])
-        fan_in = np.prod(input_shape[1:])
+        # input_dim = int(input_shape[channel_axis])
+        # fan_in = np.float32(np.prod(self.kernel_shape) * input_dim)
+        fan_in = np.float32(np.prod(self.kernel.shape[:-1]))
         self.wscale = tf.constant(np.float32(self.gain / np.sqrt(fan_in)))
 
     def call(self, input):
@@ -112,8 +114,8 @@ def block_G(res, latent_dim=512, num_channels=3, target_res=10):
 
         #         x = layers.Dense(units=nf(res - 1) * 16)(x)
         x = EqualizedLRDense(units=nf(res - 1) * 16, gain=np.sqrt(2) / 4)(x)
-        #         x = ApplyBias()(x)
         x = tf.reshape(x, [-1, 4, 4, nf(res - 1)])
+        x = ApplyBias()(x)
         x = layers.LeakyReLU(alpha=0.2)(x)
         x = PixelNormalization()(x)
 
@@ -253,7 +255,7 @@ def build_D(target_resolution=10):
             for prev_d in disc_block_list[::-1]:
                 x = prev_d(x)
             mdl = Model(inputs=x0, outputs=x)
-            mdl.alpha = fade_in.alpha
+            mdl.alpha = alpha
             model_list.append(mdl)
         else:
             mdl = Model(inputs=x0, outputs=x)
