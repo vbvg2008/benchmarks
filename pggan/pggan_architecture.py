@@ -109,7 +109,7 @@ class ApplyBias(layers.Layer):
 
 def block_G(res, latent_dim=512, num_channels=3, target_res=10):
     if res == 2:
-        x0 = layers.Input(shape=(latent_dim, ))
+        x0 = layers.Input(shape=latent_dim)
         x = PixelNormalization()(x0)
 
         #         x = layers.Dense(units=nf(res - 1) * 16)(x)
@@ -145,7 +145,7 @@ def torgb(res, num_channels=3):  # res = 2..resolution_log2
 
 
 def build_G(fade_in_alpha, latent_dim=512, initial_resolution=2, target_resolution=10):
-    x0 = layers.Input(shape=(latent_dim, ))
+    x0 = layers.Input(shape=latent_dim)
     curr_g_block = block_G(initial_resolution)
     curr_to_rgb_block = torgb(initial_resolution)
     images_out = curr_g_block(x0)
@@ -154,12 +154,8 @@ def build_G(fade_in_alpha, latent_dim=512, initial_resolution=2, target_resoluti
     gen_block_list = list()
 
     mdl = Model(inputs=x0, outputs=images_out)
-    mdl.fade_in_alpha = fade_in_alpha
     model_list.append(mdl)
-
     gen_block_list.append(curr_g_block)
-
-    prev_g_block = curr_g_block
     prev_to_rgb_block = curr_to_rgb_block
 
     for res in range(3, target_resolution + 1):
