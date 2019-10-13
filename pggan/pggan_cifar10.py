@@ -72,39 +72,32 @@ class GradientPenalty(TensorOp):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
 
     def forward(self, data, state):
-        interp, d_interp = data
-        d_interp = tf.reshape(d_interp, [-1])
+        x_interp, interp_score = data
+        interp_score = tf.reshape(interp_score, [-1])
         tape = state['tape']
-        d_interp_loss = tf.reduce_sum(d_interp)
-        grad_interp = tape.gradient(d_interp_loss, interp)
-        grad_l2 = tf.math.sqrt(
-            tf.reduce_sum(tf.math.square(grad_interp), axis=[1, 2, 3]))
-        gp = tf.math.square(grad_l2 - 1)
+        gradient_x_interp = tape.gradient(tf.reduce_sum(interp_score), x_interp)
+        grad_l2 = tf.math.sqrt(tf.reduce_sum(tf.math.square(gradient_x_interp), axis=[1, 2, 3]))
+        gp = tf.math.square(grad_l2 - 1.0)
         return gp
 
 
 class GLoss(Loss):
-    """Compute generator loss."""
-    def __init__(self, inputs, outputs=None, mode=None):
-        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-
     def forward(self, data, state):
-        fake = data
-        loss = tf.reshape(fake, [-1])
-        return loss
+        return -data
 
 
 class DLoss(Loss):
     """Compute discriminator loss."""
-    def __init__(self, inputs, outputs=None, mode=None, LAMBDA=10):
+    def __init__(self, inputs, outputs=None, mode=None, wgan_lambda=10, wgan_epsilon=0.001):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.LAMBDA = LAMBDA
+        self.wgan_lambda = wgan_lambda
+        self.wgan_epsilon = wgan_epsilon
 
-    def forward(self, data, state, eps=0.001):
+    def forward(self, data, state):
         real_score, fake_score, gp = data
         real_score = tf.reshape(real_score, [-1])
         fake_score = tf.reshape(fake_score, [-1])
-        loss = real_score - fake_score + self.LAMBDA * gp + real_score * eps
+        loss = fake_score - real_score + self.wgan_lambda * gp + real_score * self.wgan_epsilon
         return loss
 
 
@@ -124,21 +117,23 @@ class AlphaController(Trace):
             self.nimg_total = self.duration[self._idx] * state["num_examples"]
             self.change_alpha = True
             self.nimg_so_far = 0
-            print("FastEstimator-Alpha: Started fading in")
+            print("FastEstimator-Alpha: Started fading in for size {}".format(2**(self._idx+3)))
         elif state["epoch"] == fade_epoch + self.duration[self._idx]:
-            print("FastEstimator-Alpha: Finished fading in")
+            print("FastEstimator-Alpha: Finished fading in for size {}".format(2**(self._idx+3)))
             self.change_alpha = False
             self._idx += 1
-            for alpha in self.alpha:
-                backend.set_value(alpha, 1.0)
+            backend.set_value(self.alpha, 1.0)
 
     def on_batch_begin(self, state):
         # if in resolution transition, smoothly change the alpha from 0 to 1
         if self.change_alpha:
             self.nimg_so_far += state["batch_size"]
             current_alpha = np.float32(self.nimg_so_far / self.nimg_total)
-            for alpha in self.alpha:
-                backend.set_value(alpha, current_alpha)
+            backend.set_value(self.alpha, current_alpha)
+
+    # def on_batch_end(self, state):
+    #     if state["train_step"] % 10 == 0:
+    #         tf.print(self.alpha)
 
 
 class ImageSaving(Trace):
@@ -182,100 +177,45 @@ def get_estimator():
 
     # We create a scheduler for batch_size with the epochs at which it will change and corresponding values.
     batchsize_scheduler = Scheduler({0: 64, 5: 32, 15: 16, 25: 8, 35: 4})
+    # batchsize_scheduler = Scheduler({0: 64, 5: 64, 15: 64, 25: 64, 35: 32})
 
     # We create a scheduler for the Resize ops.
     resize_scheduler = Scheduler({
-        0:
-        Resize(inputs="x", size=(4, 4), outputs="x"),
-        5:
-        Resize(inputs="x", size=(8, 8), outputs="x"),
-        15:
-        Resize(inputs="x", size=(16, 16), outputs="x"),
-        25:
-        Resize(inputs="x", size=(32, 32), outputs="x"),
-        35:
-        Resize(inputs="x", size=(64, 64), outputs="x"),
-        45:
-        None
+        0: Resize(inputs="x", size=(4, 4), outputs="x"),
+        5: Resize(inputs="x", size=(8, 8), outputs="x"),
+        15:Resize(inputs="x", size=(16, 16), outputs="x"),
+        25:Resize(inputs="x", size=(32, 32), outputs="x"),
+        35:Resize(inputs="x", size=(64, 64), outputs="x"),
+        45:None
     })
 
     # In Pipeline, we use the schedulers for batch_size and ops.
-    pipeline = fe.Pipeline(batch_size=batchsize_scheduler,
-                           data=writer,
-                           ops=[
-                               resize_scheduler,
-                               CreateLowRes(inputs="x", outputs="x_lowres"),
-                               Rescale(inputs="x", outputs="x"),
-                               Rescale(inputs="x_lowres", outputs="x_lowres")
-                           ])
-
-    d2, d3, d4, d5, d6, d7 = fe.build(
-        model_def=lambda: build_D(target_resolution=7),
-        model_name=["d2", "d3", "d4", "d5", "d6", "d7"],
-        optimizer=[
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8)
-        ],
-        loss_name=["dloss", "dloss", "dloss", "dloss", "dloss", "dloss"])
-
-    g2, g3, g4, g5, g6, g7, G = fe.build(
-        model_def=lambda: build_G(target_resolution=7),
-        model_name=["g2", "g3", "g4", "g5", "g6", "g7", "G"],
-        optimizer=[
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8),
-            tf.keras.optimizers.Adam(learning_rate=0.001,
-                                     beta_1=0.0,
-                                     beta_2=0.99,
-                                     epsilon=1e-8)
-        ],
-        loss_name=[
-            "gloss", "gloss", "gloss", "gloss", "gloss", "gloss", "gloss"
+    pipeline = fe.Pipeline(
+        batch_size=batchsize_scheduler,
+        data=writer,
+        ops=[
+            resize_scheduler,
+            CreateLowRes(inputs="x", outputs="x_lowres"),
+            Rescale(inputs="x", outputs="x"),
+            Rescale(inputs="x_lowres", outputs="x_lowres")
         ])
+
+    opt2 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    opt3 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    opt4 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    opt5 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    opt6 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    opt7 = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.0, beta_2=0.99, epsilon=1e-8)
+    fade_in_alpha = tf.Variable(initial_value=1.0, dtype='float32', trainable=False)
+    d2, d3, d4, d5, d6, d7 = fe.build(model_def=lambda: build_D(fade_in_alpha=fade_in_alpha, target_resolution=7),
+                                        model_name=["d2", "d3", "d4", "d5", "d6", "d7"],
+                                        optimizer=[opt2, opt3, opt4, opt5, opt6, opt7],
+                                        loss_name=["dloss", "dloss", "dloss", "dloss", "dloss", "dloss"])
+
+    g2, g3, g4, g5, g6, g7, G = fe.build(model_def=lambda: build_G(fade_in_alpha=fade_in_alpha, target_resolution=7),
+                                        model_name=["g2", "g3", "g4", "g5", "g6", "g7", "G"],
+                                        optimizer=[opt2, opt3, opt4, opt5, opt6, opt7, opt7],
+                                        loss_name=["gloss", "gloss", "gloss", "gloss", "gloss", "gloss", "gloss"])
 
     g_scheduler = Scheduler({
         0: ModelOp(model=g2, outputs="x_fake"),
@@ -287,95 +227,50 @@ def get_estimator():
     })
 
     fake_score_scheduler = Scheduler({
-        0:
-        ModelOp(inputs="x_fake", model=d2, outputs="fake_score"),
-        5:
-        ModelOp(inputs="x_fake", model=d3, outputs="fake_score"),
-        15:
-        ModelOp(inputs="x_fake", model=d4, outputs="fake_score"),
-        25:
-        ModelOp(inputs="x_fake", model=d5, outputs="fake_score"),
-        35:
-        ModelOp(inputs="x_fake", model=d6, outputs="fake_score"),
-        45:
-        ModelOp(inputs="x_fake", model=d7, outputs="fake_score")
+        0: ModelOp(inputs="x_fake", model=d2, outputs="fake_score"),
+        5: ModelOp(inputs="x_fake", model=d3, outputs="fake_score"),
+        15:ModelOp(inputs="x_fake", model=d4, outputs="fake_score"),
+        25:ModelOp(inputs="x_fake", model=d5, outputs="fake_score"),
+        35:ModelOp(inputs="x_fake", model=d6, outputs="fake_score"),
+        45:ModelOp(inputs="x_fake", model=d7, outputs="fake_score")
     })
 
     real_score_scheduler = Scheduler({
-        0:
-        ModelOp(model=d2, outputs="real_score"),
-        5:
-        ModelOp(model=d3, outputs="real_score"),
-        15:
-        ModelOp(model=d4, outputs="real_score"),
-        25:
-        ModelOp(model=d5, outputs="real_score"),
-        35:
-        ModelOp(model=d6, outputs="real_score"),
-        45:
-        ModelOp(model=d7, outputs="real_score")
+        0: ModelOp(model=d2, outputs="real_score"),
+        5: ModelOp(model=d3, outputs="real_score"),
+        15:ModelOp(model=d4, outputs="real_score"),
+        25:ModelOp(model=d5, outputs="real_score"),
+        35:ModelOp(model=d6, outputs="real_score"),
+        45:ModelOp(model=d7, outputs="real_score")
     })
 
-    d_interp_scheduler = Scheduler({
-        0:
-        ModelOp(inputs="x_interp",
-                model=d2,
-                outputs="d_interp",
-                track_input=True),
-        5:
-        ModelOp(inputs="x_interp",
-                model=d3,
-                outputs="d_interp",
-                track_input=True),
-        15:
-        ModelOp(inputs="x_interp",
-                model=d4,
-                outputs="d_interp",
-                track_input=True),
-        25:
-        ModelOp(inputs="x_interp",
-                model=d5,
-                outputs="d_interp",
-                track_input=True),
-        35:
-        ModelOp(inputs="x_interp",
-                model=d6,
-                outputs="d_interp",
-                track_input=True),
-        45:
-        ModelOp(inputs="x_interp",
-                model=d7,
-                outputs="d_interp",
-                track_input=True)
+    interp_score_scheduler = Scheduler({
+        0: ModelOp(inputs="x_interp", model=d2, outputs="interp_score", track_input=True),
+        5: ModelOp(inputs="x_interp", model=d3, outputs="interp_score", track_input=True),
+        15: ModelOp(inputs="x_interp", model=d4, outputs="interp_score", track_input=True),
+        25: ModelOp(inputs="x_interp", model=d5, outputs="interp_score", track_input=True),
+        35: ModelOp(inputs="x_interp", model=d6, outputs="interp_score", track_input=True),
+        45: ModelOp(inputs="x_interp", model=d7, outputs="interp_score", track_input=True)
     })
 
     network = fe.Network(ops=[
-        RandomInput(inputs=lambda: 512), g_scheduler, fake_score_scheduler,
-        ImageBlender(inputs=(
-            "x", "x_lowres"), alpha=d3.alpha), real_score_scheduler,
-        Interpolate(inputs=("x_fake",
-                            "x"), outputs="x_interp"), d_interp_scheduler,
-        GradientPenalty(inputs=("x_interp", "d_interp"), outputs="gp"),
+        RandomInput(inputs=lambda: 512),
+        g_scheduler,
+        fake_score_scheduler,
+        ImageBlender(inputs=("x", "x_lowres"), alpha=fade_in_alpha),
+        real_score_scheduler,
+        Interpolate(inputs=("x_fake", "x"), outputs="x_interp"),
+        interp_score_scheduler,
+        GradientPenalty(inputs=("x_interp", "interp_score"), outputs="gp"),
         GLoss(inputs="fake_score", outputs="gloss"),
         DLoss(inputs=("real_score", "fake_score", "gp"), outputs="dloss")
     ])
 
-    estimator = fe.Estimator(network=network,
-                             pipeline=pipeline,
-                             epochs=55,
-                             traces=[
-                                 AlphaController(
-                                     alpha=[d3.alpha, g3.alpha],
-                                     fade_start=[5, 15, 25, 35, 45, 55],
-                                     duration=[5, 5, 5, 5, 5, 5]),
-                                 ImageSaving(epoch_model={
-                                     4: "g2",
-                                     14: "g3",
-                                     24: "g4",
-                                     34: "g5",
-                                     44: "g6",
-                                     54: "g7"
-                                 },
-                                             save_dir="/data/Xiaomeng/images")
-                             ])
+    estimator = fe.Estimator(
+        network=network,
+        pipeline=pipeline,
+        epochs=55,
+        traces=[AlphaController(alpha=fade_in_alpha, fade_start=[5, 15, 25, 35, 45, 55], duration=[5, 5, 5, 5, 5, 5]),
+                ImageSaving(epoch_model={4: "g2", 14: "g3", 24: "g4", 34: "g5", 44: "g6", 54: "g7"},
+                            save_dir="/data/Xiaomeng/images")])
     return estimator
