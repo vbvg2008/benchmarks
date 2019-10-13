@@ -42,7 +42,7 @@ class RandomInput(TensorOp):
         latent_dim = data
         batch_size = state["local_batch_size"]
         random_vector = tf.random.normal([batch_size, latent_dim])
-        return tf.math.l2_normalize(random_vector, axis=-1)
+        return random_vector
 
 
 class ImageBlender(TensorOp):
