@@ -95,9 +95,7 @@ class DLoss(Loss):
 
     def forward(self, data, state):
         real_score, fake_score, gp = data
-        real_score = tf.reshape(real_score, [-1])
-        fake_score = tf.reshape(fake_score, [-1])
-        loss = fake_score - real_score + self.wgan_lambda * gp + real_score * self.wgan_epsilon
+        loss = fake_score - real_score + self.wgan_lambda * gp + tf.math.square(real_score) * self.wgan_epsilon
         return loss
 
 
