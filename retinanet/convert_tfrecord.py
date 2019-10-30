@@ -37,16 +37,16 @@ class ConvertToInt32(NumpyOp):
         return data
 
 
-# sample_data = {
-#     "image": ["val2017/000000089045.jpg"],
-#     "num_obj": [9],
-#     "x1": ["[432.5, 65.81, 191.94, 594.64, 446.79, 591.69, 214.54, 513.71, 234.46]"],
-#     "y1": ["[122.93, 188.28, 132.63, 215.24, 157.56, 122.53, 54.63, 148.13, 216.31]"],
-#     "width": ["[42.04, 57.58, 277.84, 43.77, 20.84, 19.87, 16.11, 126.29, 87.82]"],
-#     "height": ["[45.71, 181.88, 96.88, 61.1, 10.97, 30.91, 22.59, 18.43, 32.34]"],
-#     "obj_label": ["[64, 62, 63, 63, 86, 62, 85, 67, 84]"],
-#     "obj_mask": ["mask_val2017/000000089045.png"]
-# }
+sample_data = {
+    "image": ["val2017/000000089045.jpg"],
+    "num_obj": [9],
+    "x1": ["[432.5, 65.81, 191.94, 594.64, 446.79, 591.69, 214.54, 513.71, 234.46]"],
+    "y1": ["[122.93, 188.28, 132.63, 215.24, 157.56, 122.53, 54.63, 148.13, 216.31]"],
+    "width": ["[42.04, 57.58, 277.84, 43.77, 20.84, 19.87, 16.11, 126.29, 87.82]"],
+    "height": ["[45.71, 181.88, 96.88, 61.1, 10.97, 30.91, 22.59, 18.43, 32.34]"],
+    "obj_label": ["[64, 62, 63, 63, 86, 62, 85, 67, 84]"],
+    "obj_mask": ["mask_val2017/000000089045.png"]
+}
 
 _, val_csv, path = load_data("/data/data")
 
@@ -68,8 +68,8 @@ writer = fe.RecordWriter(
     compression="GZIP",
     write_feature=["image", "x1", "y1", "width", "height", "obj_label", "target_cls", "target_loc", "num_obj"])
 
-writer.write()
-# results = writer.transform(data=sample_data, mode="train")
+# writer.write()
+results = writer.transform(data=sample_data, mode="train")
 
 # for key, value in results.items():
 #     value = np.array(value[0])

@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import random
 
-data_dir = "/data/data/Raw/train"
-file_name = "train.csv"
+data_dir = "/data/data/public/ImageNet2012/Raw/val"
+file_name = "val.csv"
 
 
 folder_names = os.listdir(data_dir)

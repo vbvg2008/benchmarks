@@ -3,9 +3,11 @@ import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.python.keras import backend, layers
 
 import fastestimator as fe
-import tensorflow as tf
 from fastestimator.dataset.nih_chestxray import load_data
 from fastestimator.op import TensorOp
 from fastestimator.op.numpyop import ImageReader
@@ -15,8 +17,6 @@ from fastestimator.schedule import Scheduler
 from fastestimator.trace import ModelSaver, Trace
 from fastestimator.util.record_writer import RecordWriter
 from pggan_architecture import build_D, build_G
-from tensorflow.keras.models import load_model
-from tensorflow.python.keras import backend, layers
 
 
 class Rescale(TensorOp):
@@ -174,8 +174,7 @@ def get_estimator():
                           ])
 
     # We create a scheduler for batch_size with the epochs at which it will change and corresponding values.
-    batchsize_scheduler = Scheduler({0: 64, 5: 32, 15: 16, 25: 8, 35: 4})
-    # batchsize_scheduler = Scheduler({0: 64, 5: 64, 15: 64, 25: 64, 35: 32})
+    batchsize_scheduler = Scheduler({0: 128, 5: 64, 15: 32, 25: 16, 35: 8, 45:4})
 
     # We create a scheduler for the Resize ops.
     resize_scheduler = Scheduler({

@@ -6,8 +6,7 @@ import time
 tfrecorder = TFRecorder(train_data="train.csv", 
                         validation_data="val.csv",
                         feature_name=["image", "label"], 
-                        transform_dataset=[[ImageReader(),Resize(size=[256,256]) ],[]],
-                        compression="GZIP")
+                        transform_dataset=[[ImageReader(),Resize(size=[299,299]) ],[]])
 start = time.time()
-tfrecorder.create_tfrecord("/data/data/ImageNet_tfrecord")
+tfrecorder.create_tfrecord("/data/data/public/ImageNet2012/Tfrecord")
 print("creating ImageNet tfrecord spent %f seconds" % (time.time() - start))
