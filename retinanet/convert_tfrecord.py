@@ -25,8 +25,8 @@ class GenerateTarget(NumpyOp):
 
     def forward(self, data, state):
         obj_label, x1, y1, width, height = data
-        target_cls, target_loc = get_target(self.anchorbox, obj_label, x1, y1, width, height)
-        return target_cls, target_loc
+        cls_gt, x1_gt, y1_gt, w_gt, h_gt = get_target(self.anchorbox, obj_label, x1, y1, width, height)
+        return cls_gt, x1_gt, y1_gt, w_gt, h_gt
 
 
 class ConvertToInt32(NumpyOp):
@@ -34,6 +34,14 @@ class ConvertToInt32(NumpyOp):
     def forward(self, data, state):
         for idx, elem in enumerate(data):
             data[idx] = np.int32(elem)
+        return data
+
+
+class ConvertToFloat32(NumpyOp):
+    # this thing converts '[1, 2, 3]' into np.array([1, 2, 3])
+    def forward(self, data, state):
+        for idx, elem in enumerate(data):
+            data[idx] = np.float32(elem)
         return data
 
 
@@ -61,19 +69,24 @@ writer = fe.RecordWriter(
                            keep_ratio=True,
                            inputs=["image", "x1", "y1", "width", "height"],
                            outputs=["image", "x1", "y1", "width", "height"]),
-        GenerateTarget(inputs=("obj_label", "x1", "y1", "width", "height"), outputs=("target_cls", "target_loc")),
-        ConvertToInt32(inputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "target_cls"],
-                       outputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "target_cls"])
+        GenerateTarget(inputs=("obj_label", "x1", "y1", "width", "height"),
+                       outputs=("cls_gt", "x1_gt", "y1_gt", "w_gt", "h_gt")),
+        ConvertToInt32(inputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"],
+                       outputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"]),
+        ConvertToFloat32(inputs=["x1_gt", "y1_gt", "w_gt", "h_gt"], outputs=["x1_gt", "y1_gt", "w_gt", "h_gt"])
     ],
     compression="GZIP",
-    write_feature=["image", "x1", "y1", "width", "height", "obj_label", "target_cls", "target_loc", "num_obj"])
+    write_feature=[
+        "image", "num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt", "x1_gt", "y1_gt", "w_gt", "h_gt"
+    ])
 
-# writer.write()
-results = writer.transform(data=sample_data, mode="train")
+writer.write()
+# results = writer.transform(data=sample_data, mode="train")
 
 # for key, value in results.items():
 #     value = np.array(value[0])
 #     print(key)
 #     print(value.dtype)
+#     print(value.shape)
 
 # np.savez("/data/testdata", **results)
