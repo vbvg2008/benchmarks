@@ -7,7 +7,7 @@ import fastestimator as fe
 from fastestimator.architecture.retinanet import RetinaNet, get_fpn_anchor_box, get_target
 from fastestimator.dataset.mscoco import load_data
 from fastestimator.op import NumpyOp
-from fastestimator.op.numpyop import ImageReader, ResizeImageAndBbox
+from fastestimator.op.numpyop import ImageReader, ResizeImageAndBbox, TypeConverter
 
 
 class String2List(NumpyOp):
@@ -29,21 +29,13 @@ class GenerateTarget(NumpyOp):
         return cls_gt, x1_gt, y1_gt, w_gt, h_gt
 
 
-class ConvertToInt32(NumpyOp):
-    # this thing converts '[1, 2, 3]' into np.array([1, 2, 3])
-    def forward(self, data, state):
-        for idx, elem in enumerate(data):
-            data[idx] = np.int32(elem)
-        return data
-
-
-class ConvertToFloat32(NumpyOp):
-    # this thing converts '[1, 2, 3]' into np.array([1, 2, 3])
-    def forward(self, data, state):
-        for idx, elem in enumerate(data):
-            data[idx] = np.float32(elem)
-        return data
-
+# class DebugWidthHeight(NumpyOp):
+#     def forward(self, data, state):
+#         image, width, height = data
+#         num_width = width.shape[0]
+#         assert np.count_nonzero(width) == num_width, "zero width found, width is {}, image is {}".format(width, image)
+#         assert np.count_nonzero(height) == num_width, "zero height found, height is {}, image is {}".format(height, image)
+#         return image
 
 sample_data = {
     "image": ["val2017/000000089045.jpg"],
@@ -56,11 +48,12 @@ sample_data = {
     "obj_mask": ["mask_val2017/000000089045.png"]
 }
 
-_, val_csv, path = load_data("/data/data")
+train_csv, val_csv, path = load_data("/data/data")
 
 writer = fe.RecordWriter(
-    save_dir="/data/data/coco_tfrecord",
-    train_data=val_csv,
+    save_dir=os.path.join(path, "coco_retinanet"),
+    train_data=train_csv,
+    validation_data=val_csv,
     ops=[
         ImageReader(inputs="image", parent_path=path, outputs="image"),
         String2List(inputs=["x1", "y1", "width", "height", "obj_label"],
@@ -71,9 +64,12 @@ writer = fe.RecordWriter(
                            outputs=["image", "x1", "y1", "width", "height"]),
         GenerateTarget(inputs=("obj_label", "x1", "y1", "width", "height"),
                        outputs=("cls_gt", "x1_gt", "y1_gt", "w_gt", "h_gt")),
-        ConvertToInt32(inputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"],
-                       outputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"]),
-        ConvertToFloat32(inputs=["x1_gt", "y1_gt", "w_gt", "h_gt"], outputs=["x1_gt", "y1_gt", "w_gt", "h_gt"])
+        TypeConverter(target_type='int32',
+                      inputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"],
+                      outputs=["num_obj", "x1", "y1", "width", "height", "obj_label", "cls_gt"]),
+        TypeConverter(target_type='float32',
+                      inputs=["x1_gt", "y1_gt", "w_gt", "h_gt"],
+                      outputs=["x1_gt", "y1_gt", "w_gt", "h_gt"])
     ],
     compression="GZIP",
     write_feature=[
@@ -87,6 +83,5 @@ writer.write()
 #     value = np.array(value[0])
 #     print(key)
 #     print(value.dtype)
-#     print(value.shape)
 
 # np.savez("/data/testdata", **results)
