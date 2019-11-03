@@ -17,14 +17,14 @@ import pdb
 import tempfile
 
 import numpy as np
-import tensorflow as tf
 
 import fastestimator as fe
+import tensorflow as tf
 from fastestimator.architecture import LeNet
 from fastestimator.dataset.mnist import load_data
 from fastestimator.op import NumpyOp, TensorOp
 from fastestimator.op.numpyop import ImageReader, Resize
-from fastestimator.op.tensorop import Minmax, ModelOp, Reshape, SparseCategoricalCrossentropy
+from fastestimator.op.tensorop import Minmax, ModelOp, Pad, Reshape, SparseCategoricalCrossentropy
 from fastestimator.schedule.epoch_scheduler import Scheduler
 from fastestimator.trace import Accuracy, ModelSaver
 
@@ -39,13 +39,13 @@ class ExtractLabel(TensorOp):
 class VaryLabel(NumpyOp):
     def forward(self, data, state):
         varied_list = [data]
-        length = np.random.randint(1, 11)
+        length = np.random.randint(1, 500)
         for _ in range(length):
             varied_list.append(0)
         return varied_list, length + 1
 
 
-def get_estimator(epochs=2, batch_size=2):
+def get_estimator(epochs=2, batch_size=32):
     # step 1. prepare data
     train_csv, eval_csv, path = load_data()
     writer = fe.RecordWriter(
@@ -56,13 +56,14 @@ def get_estimator(epochs=2, batch_size=2):
             ImageReader(inputs="x", grey_scale=True, parent_path=path, outputs="x"),
             VaryLabel(inputs="y", outputs=["y", "y_length"])
         ])
-    pipeline = fe.Pipeline(batch_size=batch_size, data=writer, ops=Minmax(inputs="x", outputs="x"), padded_batch=True)
+    pipeline = fe.Pipeline(batch_size=batch_size,
+                           data=writer,
+                           ops=[Minmax(inputs="x", outputs="x"), Pad(inputs="y", outputs="y", padded_shape=(500))])
 
     # step 2. prepare model
     model = fe.build(model_def=LeNet, model_name="lenet", optimizer="adam", loss_name="loss")
     network = fe.Network(ops=[
         ExtractLabel(inputs="y", outputs="y"),
-        # Reshape(shape=(2, 28, 28, 1), inputs="x"),
         ModelOp(inputs="x", model=model, outputs="y_pred"),
         SparseCategoricalCrossentropy(inputs=("y", "y_pred"), outputs="loss")
     ])
@@ -72,9 +73,10 @@ def get_estimator(epochs=2, batch_size=2):
                              pipeline=pipeline,
                              epochs=epochs,
                              traces=Accuracy(true_key="y", pred_key="y_pred", output_name='acc'))
-    return estimator
+    return pipeline, estimator
 
 
 if __name__ == "__main__":
-    est = get_estimator()
-    est.fit()
+    pipeline, est = get_estimator()
+    # est.fit()
+    pipeline.benchmark(num_steps=10000)
