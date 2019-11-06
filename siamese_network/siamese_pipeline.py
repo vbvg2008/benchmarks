@@ -34,16 +34,17 @@ def get_pipeline():
         ops=[
             Minmax(inputs="x_a", outputs="x_a"),
             Minmax(inputs="x_b", outputs="x_b"),
-            GetSimilarity(inputs=("y_a", "y_b"), outputs="similarity"),
-            ScalarFilter(inputs="similarity", filter_value=0.0,
-                         keep_prob=1 / 9)  # 9/10 chance to pick differnet category, rescaling the ratio to be 1:1
+            GetSimilarity(inputs=("y_a", "y_b"), outputs="similarity")
+            # ScalarFilter(inputs="similarity", filter_value=0.0,
+            #              keep_prob=1 / 9)  # 9/10 chance to pick differnet category, rescaling the ratio to be 1:1
         ])
     return pipeline
 
 
 if __name__ == "__main__":
     pipeline = get_pipeline()
-    result = pipeline.show_results()
-    print("the label from A is {}".format(result[0]["y_a"]))
-    print("the label from B is {}".format(result[0]["y_b"]))
-    print("the similarity between A and B is {}".format(result[0]["similarity"]))
+    pipeline.benchmark()
+    # result = pipeline.show_results()
+    # print("the label from A is {}".format(result[0]["y_a"]))
+    # print("the label from B is {}".format(result[0]["y_b"]))
+    # print("the similarity between A and B is {}".format(result[0]["similarity"]))
