@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -74,3 +75,16 @@ if __name__ == "__main__":
     print("benchmarking in disk tfrecord pipeline:")
     pipeline_disk = get_disk_pipeline(batch_size)
     pipeline_disk.benchmark()
+    print("benchmarking pure generator:")
+    (x_train, y_train), (x_eval, y_eval) = tf.keras.datasets.mnist.load_data()
+    x_train = np.expand_dims(x_train, -1)
+    x_eval = np.expand_dims(x_eval, -1)
+    original_gen = MyGen(x_train, y_train)
+    tic = time.time()
+    for idx in range(1000):
+        data = next(original_gen)
+        if idx > 0 and idx % 100 == 0:
+            elapse = time.time() - tic
+            example_sec = 100 / elapse
+            print("step: {}, image/sec: {}".format(idx, example_sec))
+            tic = time.time()
