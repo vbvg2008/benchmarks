@@ -31,4 +31,4 @@ def find_magic_numer(pipeline, mode, current_epoch=0, num_steps=1000, log_interv
 
 if __name__ == "__main__":
     pipeline = fe.Pipeline(batch_size=16, data="/data/data/MSCOCO2017/retinanet_coco", padded_batch=True)
-    find_magic_numer(pipeline, "train", num_steps=400)
+    find_magic_numer(pipeline, "eval", num_steps=400)
