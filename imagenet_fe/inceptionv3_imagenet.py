@@ -10,6 +10,10 @@ from fastestimator.op.numpyop import ImageReader, Resize
 from fastestimator.op.tensorop import ModelOp, Scale, SparseCategoricalCrossentropy
 from fastestimator.trace import Accuracy, ModelSaver
 
+# train_link = "http://www.image-net.org/challenges/LSVRC/2012/dd31405981ef5f776aa17412e1f0c112/ILSVRC2012_img_val.tar"
+
+# val_link = "http://www.image-net.org/challenges/LSVRC/2012/dd31405981ef5f776aa17412e1f0c112/ILSVRC2012_img_train.tar"
+
 
 def prepare_imagenet_csv(data_folder):
     modes = ["train", "val"]
