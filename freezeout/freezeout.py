@@ -85,7 +85,7 @@ def get_estimator(epochs=2, batch_size=32, steps_per_epoch=None, validation_step
         ModelOp(inputs="x", model=model, outputs="y_pred"),
         SparseCategoricalCrossentropy(inputs=("y", "y_pred"), outputs="loss"),
         Gradients(loss="loss", models=model, outputs="gradients"),
-        Freezeout(inputs="gradients", outputs="gradients", layer_idx=6, prob=0.5, model=model, mode="train"),
+        Freezeout(inputs="gradients", outputs="gradients", layer_idx=[6, 7], prob=0.5, model=model, mode="train"),
         UpdateOp(model=model, gradients="gradients")
     ])
 
