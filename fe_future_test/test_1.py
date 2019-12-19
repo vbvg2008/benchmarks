@@ -86,12 +86,12 @@ class MnistDataset(Dataset):
 
 
 def get_estimator():
-    dataset_train = MnistDataset(csv_path="/data/data/MNIST/train.csv", parrent_path="/data/data/MNIST")
-    dataset_eval = MnistDataset(csv_path="/data/data/MNIST/eval.csv", parrent_path="/data/data/MNIST")
-    train_loader = DataLoader(dataset=dataset_train, batch_size=32, shuffle=True, num_workers=16)
-    test_loader = DataLoader(dataset=dataset_eval, batch_size=32, shuffle=True, num_workers=16)
+    dataset_train = MnistDataset(csv_path="/data/data/MNIST/train.csv", parrent_path="/data/data/MNIST/")
+    dataset_eval = MnistDataset(csv_path="/data/data/MNIST/eval.csv", parrent_path="/data/data/MNIST/")
+    train_loader = DataLoader(dataset=dataset_train, batch_size=32, shuffle=True, num_workers=8)
+    test_loader = DataLoader(dataset=dataset_eval, batch_size=32, shuffle=True, num_workers=8)
 
-    model = fe.build(model_def=tf_model, optimizer_def="sgd")
+    model = fe.build(model_def=torch_model, optimizer_def="sgd")
     pdb.set_trace()
     return model
 
@@ -107,3 +107,12 @@ if __name__ == "__main__":
 #             example_sec = 100 * 32 / elapse
 #             print("step: {}, image/sec: {}".format(idx, example_sec))
 #             tic = time.perf_counter()
+
+torch.nn.CrossEntropyLoss()
+
+loss = nn.CrossEntropyLoss()
+input = torch.randn(3, 5, requires_grad=True)
+target = torch.empty(3, dtype=torch.long).random_(5)
+output = loss(input, target)
+output.backward()
+
