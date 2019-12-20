@@ -24,9 +24,9 @@ def compare_ce(batch_size, num_classes, softmaxed=True):
     else:
         ce_torch_1a = torch.nn.NLLLoss(reduction="none")(torch.log(y_pred_torch), y_gt_torch)
     print("ce_torch: {}".format(ce_torch_1a))
-    # pdb.set_trace()
+    pdb.set_trace()
 
 
 #case 1: binary cross-entropy
-compare_ce(batch_size=4, num_classes=10, softmaxed=True)
-compare_ce(batch_size=4, num_classes=10, softmaxed=False)
+compare_ce(batch_size=4, num_classes=2, softmaxed=True)
+compare_ce(batch_size=4, num_classes=2, softmaxed=False)
