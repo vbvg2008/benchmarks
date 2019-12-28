@@ -1,5 +1,6 @@
 import os
 import pdb
+import time
 
 import cv2
 import numpy as np
@@ -92,27 +93,24 @@ def get_estimator():
     test_loader = DataLoader(dataset=dataset_eval, batch_size=32, shuffle=True, num_workers=8)
 
     model = fe.build(model_def=torch_model, optimizer_def="sgd")
-    pdb.set_trace()
-    return model
+    # pdb.set_trace()
+    return train_loader, test_loader, model
 
 
 if __name__ == "__main__":
-    model = get_estimator()
-#     ds_iter = iter(dataloader)
-#     tic = time.perf_counter()
-#     for idx in range(1850):
-#         batch_data = next(ds_iter)
-#         if idx > 0 and idx % 100 == 0:
-#             elapse = time.perf_counter() - tic
-#             example_sec = 100 * 32 / elapse
-#             print("step: {}, image/sec: {}".format(idx, example_sec))
-#             tic = time.perf_counter()
+    train_loader, test_loader, model = get_estimator()
+    tic = time.perf_counter()
+    for idx, batch_data in enumerate(train_loader):
+        if idx > 0 and idx % 100 == 0:
+            elapse = time.perf_counter() - tic
+            example_sec = 100 * 32 / elapse
+            print("step: {}, image/sec: {}".format(idx, example_sec))
+            tic = time.perf_counter()
 
-torch.nn.CrossEntropyLoss()
+# torch.nn.CrossEntropyLoss()
 
-loss = nn.CrossEntropyLoss()
-input = torch.randn(3, 5, requires_grad=True)
-target = torch.empty(3, dtype=torch.long).random_(5)
-output = loss(input, target)
-output.backward()
-
+# loss = nn.CrossEntropyLoss()
+# input = torch.randn(3, 5, requires_grad=True)
+# target = torch.empty(3, dtype=torch.long).random_(5)
+# output = loss(input, target)
+# output.backward()
