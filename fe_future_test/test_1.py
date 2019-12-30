@@ -99,6 +99,7 @@ def get_estimator():
 
 if __name__ == "__main__":
     train_loader, test_loader, model = get_estimator()
+    pdb.set_trace()
     tic = time.perf_counter()
     for idx, batch_data in enumerate(train_loader):
         if idx > 0 and idx % 100 == 0:
