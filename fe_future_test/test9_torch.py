@@ -68,7 +68,6 @@ class Net(torch.nn.Module):
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
-        x = F.softmax(x, dim=-1)
         return x
 
     def num_flat_features(self, x):
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     # net.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters())
-
+    optimizer.zero_grad()
     tic = time.perf_counter()
     for idx, batch in enumerate(train_loader):
         x = batch["x"]
@@ -92,15 +91,15 @@ if __name__ == "__main__":
         # x = x.to(device)
         # y = y.to(device)
 
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
         y_pred = net(x)
         loss = criterion(y_pred, y)
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
         # running_loss += loss.to("cpu").item()
-        if idx % 100 == 99:  # print every 100 mini-batches
-            print('[%5d] loss: %.3f' % (idx + 1, loss.item()))
-            running_loss = 0.0
+        if idx % 100 == 0:  # print every 100 mini-batches
+            print('loss: %.3f' % loss.item())
             elapse = time.perf_counter() - tic
             example_sec = 100 * 32 / elapse
             print("step: {}, image/sec: {}".format(idx, example_sec))
