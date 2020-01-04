@@ -62,3 +62,8 @@ def get_estimator():
                              steps_per_epoch=1875,
                              traces=Accuracy(true_key="y", pred_key="y_pred"))
     return estimator
+
+
+if __name__ == "__main__":
+	est = get_estimator()
+	est.fit()
