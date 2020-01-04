@@ -50,7 +50,6 @@ class Net(torch.nn.Module):
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
-        x = F.softmax(x, dim=-1)
         return x
 
     def num_flat_features(self, x):
@@ -59,10 +58,10 @@ class Net(torch.nn.Module):
 
 if __name__ == "__main__":
 
-    pipeline = get_in_memory_pipeline(32)
-    pipeline.global_batch_multiplier = 1
-    pipeline.prepare()
-    ds_iter = pipeline.dataset_schedule["train"].get_current_value(0)
+    # pipeline = get_in_memory_pipeline(32)
+    # pipeline.global_batch_multiplier = 1
+    # pipeline.prepare()
+    # ds_iter = pipeline.dataset_schedule["train"].get_current_value(0)
 
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5], [0.5], inplace=True)])
 
@@ -84,24 +83,25 @@ if __name__ == "__main__":
     #         tic = time.perf_counter()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = Net()
-    net.to(device)
+    # net.to(device)
     criterion = nn.CrossEntropyLoss()
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     tic = time.perf_counter()
     running_loss = 0.0
     for i in range(10000):
-        batch_data = next(ds_iter)
+        # batch_data = next(ds_iter)
         # x = batch_data["x"]
         # y = batch_data["y"]
 
-        x = torch.tensor(batch_data["x"].numpy())
-        y = torch.tensor(batch_data["y"].numpy())
+        # x = torch.tensor(batch_data["x"].numpy())
+        # y = torch.tensor(batch_data["y"].numpy())
 
-        # x, y = next(dataiter)
-        x = x.to(device)
-        y = y.to(device)
-        x = x.permute(0, 3, 1, 2)
+        x, y = next(dataiter)
+        pdb.set_trace()
+        # x = x.to(device)
+        # y = y.to(device)
+        # x = x.permute(0, 3, 1, 2)
         # #zero the parameter gradients
         optimizer.zero_grad()
 

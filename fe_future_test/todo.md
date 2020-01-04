@@ -1,16 +1,11 @@
 
+### to do list:
 
+* make pytorch cpu training work with same speed 2000-2100
 
-* train_data should take 
-	* FastEstimator Dataset
-	* pytorch data loader
-	* tensorflow dataset
+* make pytorch gpu training work with same speed  6000-7000
 
-2. make pytorch training work
-
-3. benchmark some speed
-
-4. update several examples, let MP know
+4. update several examples, let team know
 
 5. make it notebook friendly
 
@@ -18,7 +13,7 @@
 
 7. add single gpu, do benchmark on cretain gpu speed
 
-8. add multi-gpu, do benchmark 
+8. add multi-gpu, do benchmark
 
 
 

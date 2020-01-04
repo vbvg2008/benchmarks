@@ -1,21 +1,20 @@
 """test case for tensorflow users
 """
 import os
-import cv2
 import pdb
+
+import cv2
 import numpy as np
 import pandas as pd
-import fastestimator as fe
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
+import fastestimator as fe
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.metric import Accuracy
-
 
 
 class MnistDataset(Dataset):
@@ -42,6 +41,7 @@ class MnistDataset(Dataset):
         data["x"] = cv2.imread(os.path.join(self.parrent_path, data["x"]), cv2.IMREAD_GRAYSCALE)
         data["x"] = np.expand_dims(data["x"], 0)
         data["x"] = data["x"] / 255.0
+        data["x"] = np.float32(data["x"])
         return data
 
 
