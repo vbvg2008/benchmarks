@@ -77,7 +77,7 @@ class Net(torch.nn.Module):
 if __name__ == "__main__":
     train_loader = get_dataloader(csv_path="/data/data/MNIST/train.csv", parrent_path="/data/data/MNIST/")
     eval_loader = get_dataloader(csv_path="/data/data/MNIST/eval.csv", parrent_path="/data/data/MNIST/")
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = Net()
     # net.to(device)
     criterion = nn.CrossEntropyLoss()
@@ -100,6 +100,7 @@ if __name__ == "__main__":
         # running_loss += loss.to("cpu").item()
         if idx % 100 == 0:  # print every 100 mini-batches
             print('loss: %.3f' % loss.item())
+            # print('loss: %.3f' % loss.to("cpu").item())
             elapse = time.perf_counter() - tic
             example_sec = 100 * 32 / elapse
             print("step: {}, image/sec: {}".format(idx, example_sec))
