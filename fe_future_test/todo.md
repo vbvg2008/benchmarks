@@ -1,12 +1,14 @@
 
 ### to do list:
 
+* test same example on cpu
 
-* make pytorch gpu training work with same speed  6000-7000
+* update several examples, let team know
+
+* check the pytorch performance issue
 
 * make it notebook friendly
 
-4. update several examples, let team know
 
 6. add scheduling functionality
 
@@ -16,13 +18,8 @@
 
 
 
-Pipeline:
-	- output filter mechanism, only output what's used by Network and Trace
 
 
-Network:
-	- input filter mechanism, only send network related data to gpu
-	- output filter mechanism, only return Trace inputs from gpu to cpu - prediction
 
-Estimator:
-	batch (from cpu) prediction(from gpu)
+### ideas:
+

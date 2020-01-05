@@ -79,7 +79,7 @@ if __name__ == "__main__":
     eval_loader = get_dataloader(csv_path="/data/data/MNIST/eval.csv", parrent_path="/data/data/MNIST/")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = Net()
-    # net.to(device)
+    net.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters())
     optimizer.zero_grad()
@@ -88,19 +88,18 @@ if __name__ == "__main__":
         x = batch["x"]
         y = batch["y"]
 
-        # x = x.to(device)
-        # y = y.to(device)
+        x = x.to(device)
+        y = y.to(device)
 
-        # optimizer.zero_grad()
         y_pred = net(x)
         loss = criterion(y_pred, y)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-        # running_loss += loss.to("cpu").item()
+
         if idx % 100 == 0:  # print every 100 mini-batches
-            print('loss: %.3f' % loss.item())
-            # print('loss: %.3f' % loss.to("cpu").item())
+            # print('loss: %.3f' % loss.item())
+            print('loss: %.3f' % loss.to("cpu").item())
             elapse = time.perf_counter() - tic
             example_sec = 100 * 32 / elapse
             print("step: {}, image/sec: {}".format(idx, example_sec))
