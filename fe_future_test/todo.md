@@ -1,12 +1,6 @@
 
 ### to do list:
 
-* update several examples
-
-* push to codebase
-
-------------
-
 * make it notebook friendly
 
 ------------
