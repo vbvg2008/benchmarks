@@ -59,3 +59,4 @@ network.transform()
 
 	Pipeline:  A(inputs="x", )
 
+4. Trace interface change

@@ -83,6 +83,7 @@ def get_estimator():
     #step 1
     pipeline = fe.Pipeline(train_data=get_dataloader(csv_path="/data/data/MNIST/train.csv", parrent_path="/data/data/MNIST/"),
                            eval_data=get_dataloader(csv_path="/data/data/MNIST/eval.csv", parrent_path="/data/data/MNIST/"))
+    pdb.set_trace()
     #step 2
     model = fe.build(model_def=Net, optimizer_def="adam")
     network = fe.Network(ops=[
