@@ -1,5 +1,6 @@
 ### To-do list
 
+* UpdateOp convergence speed difference
 * new FE pipeline design - MP
 	* move pipeline to new codebase
     * Dataset class (csv dataset, folder structure dataset, in-memory dataset, generator dataset)
@@ -13,7 +14,7 @@
 
 
 Eng work
-* windows cli (see pip install) 
+* windows cli (see pip install)
 * nightly built website ?  if needed to update the docstrings or tutorials/examples, automatic serve?
 * docstring md format? what do we need?
 * Version control in FE documentation page -
@@ -53,7 +54,7 @@ network.transform()
 
 1. new version usage (pytorch user, tensorflow user)
 
-2. backend 
+2. backend
 
 3. improvements: memory consumption
 
