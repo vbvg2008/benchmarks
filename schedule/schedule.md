@@ -1,23 +1,3 @@
-### To-do list
-
-* new FE pipeline design - MP
-	* move pipeline to new codebase
-    * Dataset class (csv dataset, folder structure dataset, in-memory dataset, generator dataset)
-        len(dataset)
-        dataset[0]
-    * integrate albumentation with Operator
-    * fix pipeline multi-processing
-
-* new app hub example - JP
-
-
-
-Eng work
-* windows cli (see pip install) 
-* nightly built website ?  if needed to update the docstrings or tutorials/examples, automatic serve?
-* docstring md format? what do we need?
-* Version control in FE documentation page -
-
 ## ideas
 
 Pipeline:
@@ -45,18 +25,3 @@ pipeline.transform()
 
 network.show_results(pipeline=pipeline, epoch=0, mode="train")
 network.transform()
-
-
-
-
-## Showcase
-
-1. new version usage (pytorch user, tensorflow user)
-
-2. backend 
-
-3. improvements: memory consumption
-
-	Pipeline:  A(inputs="x", )
-
-4. Trace interface change
