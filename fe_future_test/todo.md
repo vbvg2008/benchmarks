@@ -1,7 +1,7 @@
 
 ### to do list:
 
-* make it notebook friendly
+
 
 ------------
 
@@ -11,7 +11,7 @@
 
 8. add multi-gpu, do benchmark
 
-
+* make it notebook friendly
 
 ## board
 
@@ -49,3 +49,16 @@ still needs warm-up
  Update = reduce + update
 
  gradient_Op = reduce + gradient
+
+
+
+Ideas 1:
+
+users should provide the tf.data.dataset, torch.dataloader through pipeline
+
+reason:
+1. (tf.dataset, torch loader) users can benefit from pipeline functionalities like benchmark, show_batch ...
+
+
+ideas 2:
+no need to support a scheduler or pipelines,

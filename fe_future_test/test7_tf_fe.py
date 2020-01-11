@@ -1,5 +1,7 @@
 """test case for tensorflow users
 """
+import pdb
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import Sequential, layers
@@ -45,6 +47,9 @@ def tf_model(input_shape=(28, 28, 1), classes=10):
 def get_estimator():
     #step 1
     (x_train, y_train), (x_eval, y_eval) = tf.keras.datasets.mnist.load_data()
+
+    train_ds = get_dataset(x=np.expand_dims(x_train, -1), y=y_train)
+    pdb.set_trace()
     pipeline = fe.Pipeline(train_data=get_dataset(x=np.expand_dims(x_train, -1), y=y_train),
                            eval_data=get_dataset(x=np.expand_dims(x_eval, -1), y=y_eval),
                            batch_size=32)
@@ -65,5 +70,5 @@ def get_estimator():
 
 
 if __name__ == "__main__":
-	est = get_estimator()
-	est.fit()
+    est = get_estimator()
+    est.fit()
