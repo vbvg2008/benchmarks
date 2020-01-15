@@ -77,9 +77,6 @@ still needs warm-up
  gradient_Op = reduce + gradient
 
 
-Jan 29th - FE website and nightly test
-Feb 26th - FE API - multiframework
-Mar 25th - FE release 1.0 release, documentation update and application hub extension
 
 * TVM? Ray?
 
@@ -90,6 +87,3 @@ Mar 25th - FE release 1.0 release, documentation update and application hub exte
  
 
 
- * Goole analytics to monitor usage
- * Customized license
- * GE brand
