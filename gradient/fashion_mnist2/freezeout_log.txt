@@ -1,0 +1,144 @@
+    ______           __  ______     __  _                 __            
+   / ____/___ ______/ /_/ ____/____/ /_(_)___ ___  ____ _/ /_____  _____
+  / /_  / __ `/ ___/ __/ __/ / ___/ __/ / __ `__ \/ __ `/ __/ __ \/ ___/
+ / __/ / /_/ (__  ) /_/ /___(__  ) /_/ / / / / / / /_/ / /_/ /_/ / /    
+/_/    \__,_/____/\__/_____/____/\__/_/_/ /_/ /_/\__,_/\__/\____/_/     
+                                                                        
+
+FastEstimator-Start: step: 0; total_train_steps: 9360; resnet101_lr: 0.001; 
+FastEstimator-Train: step: 0; loss: 4.7836714; 
+FastEstimator-Train: step: 100; loss: 0.7302439; examples/sec: 2310.3; progress: 1.1%; 
+FastEstimator-Train: step: 200; loss: 0.4894464; examples/sec: 2300.3; progress: 2.1%; 
+FastEstimator-Train: step: 300; loss: 0.5970459; examples/sec: 2299.8; progress: 3.2%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 312; epoch: 0; loss: 2.7769978; min_loss: 2.7769978; since_best_loss: 0; acc: 0.17998798076923078; 
+FastEstimator-Train: step: 400; loss: 0.4923039; examples/sec: 2131.9; progress: 4.3%; 
+FastEstimator-Train: step: 500; loss: 0.7144186; examples/sec: 2294.9; progress: 5.3%; 
+FastEstimator-Train: step: 600; loss: 1.3297203; examples/sec: 2290.7; progress: 6.4%; 
+FastEstimator-Eval: step: 624; epoch: 1; loss: 7.2949095; min_loss: 2.7769978; since_best_loss: 1; acc: 0.4628405448717949; 
+FastEstimator-Train: step: 700; loss: 1.2808294; examples/sec: 1433.5; progress: 7.5%; 
+FastEstimator-Train: step: 800; loss: 0.5400214; examples/sec: 2292.5; progress: 8.5%; 
+FastEstimator-Train: step: 900; loss: 0.543382; examples/sec: 2292.9; progress: 9.6%; 
+FastEstimator-Eval: step: 936; epoch: 2; loss: 173.38022; min_loss: 2.7769978; since_best_loss: 2; acc: 0.11298076923076923; 
+FastEstimator-Train: step: 1000; loss: 0.4125323; examples/sec: 2226.3; progress: 10.7%; 
+FastEstimator-Train: step: 1100; loss: 0.3956777; examples/sec: 2289.5; progress: 11.8%; 
+FastEstimator-Train: step: 1200; loss: 0.3957904; examples/sec: 2291.3; progress: 12.8%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 1248; epoch: 3; loss: 0.5834934; min_loss: 0.5834935; since_best_loss: 0; acc: 0.7803485576923077; 
+FastEstimator-Train: step: 1300; loss: 0.3808266; examples/sec: 2078.8; progress: 13.9%; 
+FastEstimator-Train: step: 1400; loss: 0.3737193; examples/sec: 2288.4; progress: 15.0%; 
+FastEstimator-Train: step: 1500; loss: 1.2028232; examples/sec: 2289.1; progress: 16.0%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 1560; epoch: 4; loss: 0.4615825; min_loss: 0.4615825; since_best_loss: 0; acc: 0.8340344551282052; 
+FastEstimator-Train: step: 1600; loss: 0.3889018; examples/sec: 2292.3; progress: 17.1%; 
+FastEstimator-Train: step: 1700; loss: 0.6087134; examples/sec: 2291.2; progress: 18.2%; 
+FastEstimator-Train: step: 1800; loss: 0.4349558; examples/sec: 2290.4; progress: 19.2%; 
+FastEstimator-Eval: step: 1872; epoch: 5; loss: 23.213663; min_loss: 0.4615825; since_best_loss: 1; acc: 0.7494991987179487; 
+FastEstimator-Train: step: 1900; loss: 0.3064493; examples/sec: 2285.0; progress: 20.3%; 
+FastEstimator-Train: step: 2000; loss: 0.814232; examples/sec: 2289.9; progress: 21.4%; 
+FastEstimator-Train: step: 2100; loss: 0.7321986; examples/sec: 2288.1; progress: 22.4%; 
+FastEstimator-Eval: step: 2184; epoch: 6; loss: 1.7063826; min_loss: 0.4615825; since_best_loss: 2; acc: 0.5621995192307693; 
+FastEstimator-Train: step: 2200; loss: 0.963393; examples/sec: 2281.0; progress: 23.5%; 
+FastEstimator-Train: step: 2300; loss: 0.3578974; examples/sec: 2286.7; progress: 24.6%; 
+FastEstimator-Train: step: 2400; loss: 0.3712404; examples/sec: 2288.7; progress: 25.6%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 2496; epoch: 7; loss: 0.3963476; min_loss: 0.39634755; since_best_loss: 0; acc: 0.8537660256410257; 
+FastEstimator-Train: step: 2500; loss: 0.3277767; examples/sec: 1262.5; progress: 26.7%; 
+FastEstimator-Train: step: 2600; loss: 0.2568465; examples/sec: 2287.7; progress: 27.8%; 
+FastEstimator-Train: step: 2700; loss: 0.3629297; examples/sec: 2290.4; progress: 28.8%; 
+FastEstimator-Train: step: 2800; loss: 0.6143917; examples/sec: 2287.0; progress: 29.9%; 
+FastEstimator-Eval: step: 2808; epoch: 8; loss: 2028.3251; min_loss: 0.39634755; since_best_loss: 1; acc: 0.11348157051282051; 
+FastEstimator-Train: step: 2900; loss: 0.5384876; examples/sec: 2275.9; progress: 31.0%; 
+FastEstimator-Train: step: 3000; loss: 0.4799002; examples/sec: 2289.0; progress: 32.1%; 
+FastEstimator-Train: step: 3100; loss: 0.4179822; examples/sec: 2285.2; progress: 33.1%; 
+FastEstimator-Eval: step: 3120; epoch: 9; loss: 0.4457434; min_loss: 0.39634755; since_best_loss: 2; acc: 0.8374399038461539; 
+FastEstimator-Train: step: 3200; loss: 0.4685114; examples/sec: 2022.4; progress: 34.2%; 
+FastEstimator-Train: step: 3300; loss: 0.4095876; examples/sec: 2288.0; progress: 35.3%; 
+FastEstimator-Train: step: 3400; loss: 0.4352157; examples/sec: 2288.3; progress: 36.3%; 
+FastEstimator-Eval: step: 3432; epoch: 10; loss: 0.4950295; min_loss: 0.39634755; since_best_loss: 3; acc: 0.8069911858974359; 
+FastEstimator-Train: step: 3500; loss: 0.4030131; examples/sec: 2282.2; progress: 37.4%; 
+FastEstimator-Train: step: 3600; loss: 0.3680539; examples/sec: 2287.9; progress: 38.5%; 
+FastEstimator-Train: step: 3700; loss: 0.3021351; examples/sec: 2288.5; progress: 39.5%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 3744; epoch: 11; loss: 0.3962043; min_loss: 0.3962043; since_best_loss: 0; acc: 0.8540665064102564; 
+FastEstimator-Train: step: 3800; loss: 0.2216964; examples/sec: 2283.5; progress: 40.6%; 
+FastEstimator-Train: step: 3900; loss: 0.3368736; examples/sec: 2286.8; progress: 41.7%; 
+FastEstimator-Train: step: 4000; loss: 0.3068666; examples/sec: 2286.1; progress: 42.7%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 4056; epoch: 12; loss: 0.3464738; min_loss: 0.3464738; since_best_loss: 0; acc: 0.8731971153846154; 
+FastEstimator-Train: step: 4100; loss: 0.2804596; examples/sec: 2280.1; progress: 43.8%; 
+FastEstimator-Train: step: 4200; loss: 0.2102449; examples/sec: 2288.1; progress: 44.9%; 
+FastEstimator-Train: step: 4300; loss: 0.2175099; examples/sec: 2288.3; progress: 45.9%; 
+FastEstimator-Eval: step: 4368; epoch: 13; loss: 0.3697066; min_loss: 0.3464738; since_best_loss: 1; acc: 0.8687900641025641; 
+FastEstimator-Train: step: 4400; loss: 1.5780013; examples/sec: 1896.9; progress: 47.0%; 
+FastEstimator-Train: step: 4500; loss: 0.2995096; examples/sec: 2287.2; progress: 48.1%; 
+FastEstimator-Train: step: 4600; loss: 0.1991328; examples/sec: 2286.9; progress: 49.1%; 
+FastEstimator-Eval: step: 4680; epoch: 14; loss: 0.3929548; min_loss: 0.3464738; since_best_loss: 2; acc: 0.8586738782051282; 
+FastEstimator-Train: step: 4700; loss: 0.2454435; examples/sec: 2284.6; progress: 50.2%; 
+FastEstimator-Train: step: 4800; loss: 0.2122244; examples/sec: 2287.7; progress: 51.3%; 
+FastEstimator-Train: step: 4900; loss: 0.2162739; examples/sec: 2287.9; progress: 52.4%; 
+FastEstimator-Eval: step: 4992; epoch: 15; loss: 0.9758345; min_loss: 0.3464738; since_best_loss: 3; acc: 0.7763421474358975; 
+FastEstimator-Train: step: 5000; loss: 0.3737907; examples/sec: 2278.9; progress: 53.4%; 
+FastEstimator-Train: step: 5100; loss: 0.252379; examples/sec: 2286.6; progress: 54.5%; 
+FastEstimator-Train: step: 5200; loss: 0.3584851; examples/sec: 2289.1; progress: 55.6%; 
+FastEstimator-Train: step: 5300; loss: 0.2965541; examples/sec: 2286.3; progress: 56.6%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 5304; epoch: 16; loss: 0.3265906; min_loss: 0.32659066; since_best_loss: 0; acc: 0.8812099358974359; 
+FastEstimator-Train: step: 5400; loss: 0.2413545; examples/sec: 2279.4; progress: 57.7%; 
+FastEstimator-Train: step: 5500; loss: 0.2266558; examples/sec: 2286.4; progress: 58.8%; 
+FastEstimator-Train: step: 5600; loss: 0.1608167; examples/sec: 2287.0; progress: 59.8%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 5616; epoch: 17; loss: 0.3149828; min_loss: 0.31498283; since_best_loss: 0; acc: 0.8834134615384616; 
+FastEstimator-Train: step: 5700; loss: 0.320199; examples/sec: 2283.2; progress: 60.9%; 
+FastEstimator-Train: step: 5800; loss: 0.2072634; examples/sec: 2288.4; progress: 62.0%; 
+FastEstimator-Train: step: 5900; loss: 0.2622514; examples/sec: 2288.6; progress: 63.0%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 5928; epoch: 18; loss: 0.3066104; min_loss: 0.30661044; since_best_loss: 0; acc: 0.8888221153846154; 
+FastEstimator-Train: step: 6000; loss: 0.1690606; examples/sec: 2289.0; progress: 64.1%; 
+FastEstimator-Train: step: 6100; loss: 0.1643995; examples/sec: 2287.1; progress: 65.2%; 
+FastEstimator-Train: step: 6200; loss: 0.2153026; examples/sec: 2287.9; progress: 66.2%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 6240; epoch: 19; loss: 0.3061149; min_loss: 0.3061149; since_best_loss: 0; acc: 0.8874198717948718; 
+FastEstimator-Train: step: 6300; loss: 0.2011291; examples/sec: 2288.7; progress: 67.3%; 
+FastEstimator-Train: step: 6400; loss: 0.2105839; examples/sec: 2287.2; progress: 68.4%; 
+FastEstimator-Train: step: 6500; loss: 0.2353168; examples/sec: 2288.3; progress: 69.4%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpo36x0_kv/resnet101_best_loss.h5
+FastEstimator-Eval: step: 6552; epoch: 20; loss: 0.3043327; min_loss: 0.30433273; since_best_loss: 0; acc: 0.8944310897435898; 
+FastEstimator-Train: step: 6600; loss: 0.1361653; examples/sec: 2279.0; progress: 70.5%; 
+FastEstimator-Train: step: 6700; loss: 0.1424613; examples/sec: 2285.5; progress: 71.6%; 
+FastEstimator-Train: step: 6800; loss: 0.1503574; examples/sec: 2286.8; progress: 72.6%; 
+FastEstimator-Eval: step: 6864; epoch: 21; loss: 0.3777936; min_loss: 0.30433273; since_best_loss: 1; acc: 0.8997395833333334; 
+FastEstimator-Train: step: 6900; loss: 0.2535835; examples/sec: 2282.9; progress: 73.7%; 
+FastEstimator-Train: step: 7000; loss: 0.2481277; examples/sec: 2285.5; progress: 74.8%; 
+FastEstimator-Train: step: 7100; loss: 0.153547; examples/sec: 2287.2; progress: 75.9%; 
+FastEstimator-Eval: step: 7176; epoch: 22; loss: 0.3604215; min_loss: 0.30433273; since_best_loss: 2; acc: 0.8792067307692307; 
+FastEstimator-Train: step: 7200; loss: 0.1566981; examples/sec: 2279.8; progress: 76.9%; 
+FastEstimator-Train: step: 7300; loss: 0.2025291; examples/sec: 2288.7; progress: 78.0%; 
+FastEstimator-Train: step: 7400; loss: 0.2301884; examples/sec: 2287.3; progress: 79.1%; 
+FastEstimator-Eval: step: 7488; epoch: 23; loss: 0.3186863; min_loss: 0.30433273; since_best_loss: 3; acc: 0.8988381410256411; 
+FastEstimator-Train: step: 7500; loss: 0.1710886; examples/sec: 2276.7; progress: 80.1%; 
+FastEstimator-Train: step: 7600; loss: 0.2484019; examples/sec: 2286.0; progress: 81.2%; 
+FastEstimator-Train: step: 7700; loss: 0.1672543; examples/sec: 2287.6; progress: 82.3%; 
+FastEstimator-Eval: step: 7800; epoch: 24; loss: 170028.44; min_loss: 0.30433273; since_best_loss: 4; acc: 0.10126201923076923; 
+FastEstimator-Train: step: 7800; loss: 0.4104292; examples/sec: 2290.3; progress: 83.3%; 
+FastEstimator-Train: step: 7900; loss: 0.7193502; examples/sec: 2287.8; progress: 84.4%; 
+FastEstimator-Train: step: 8000; loss: 2.5994112; examples/sec: 2287.1; progress: 85.5%; 
+FastEstimator-Train: step: 8100; loss: 0.9081196; examples/sec: 2286.6; progress: 86.5%; 
+FastEstimator-Eval: step: 8112; epoch: 25; loss: 754.63367; min_loss: 0.30433273; since_best_loss: 5; acc: 0.3929286858974359; 
+FastEstimator-Train: step: 8200; loss: 0.4898212; examples/sec: 2273.0; progress: 87.6%; 
+FastEstimator-Train: step: 8300; loss: 0.4973046; examples/sec: 2288.4; progress: 88.7%; 
+FastEstimator-Train: step: 8400; loss: 0.3862102; examples/sec: 2289.0; progress: 89.7%; 
+FastEstimator-Eval: step: 8424; epoch: 26; loss: 0.609241; min_loss: 0.30433273; since_best_loss: 6; acc: 0.7747395833333334; 
+FastEstimator-Train: step: 8500; loss: 0.2797046; examples/sec: 2283.8; progress: 90.8%; 
+FastEstimator-Train: step: 8600; loss: 0.4826313; examples/sec: 2287.6; progress: 91.9%; 
+FastEstimator-Train: step: 8700; loss: 0.394858; examples/sec: 2287.5; progress: 92.9%; 
+FastEstimator-Eval: step: 8736; epoch: 27; loss: 0.8578371; min_loss: 0.30433273; since_best_loss: 7; acc: 0.6929086538461539; 
+FastEstimator-Train: step: 8800; loss: 0.3740613; examples/sec: 2283.7; progress: 94.0%; 
+FastEstimator-Train: step: 8900; loss: 0.437592; examples/sec: 2288.0; progress: 95.1%; 
+FastEstimator-Train: step: 9000; loss: 0.3768898; examples/sec: 2286.6; progress: 96.2%; 
+FastEstimator-Eval: step: 9048; epoch: 28; loss: 0.3706068; min_loss: 0.30433273; since_best_loss: 8; acc: 0.8629807692307693; 
+FastEstimator-Train: step: 9100; loss: 0.3333045; examples/sec: 2283.3; progress: 97.2%; 
+FastEstimator-Train: step: 9200; loss: 0.3373881; examples/sec: 2287.1; progress: 98.3%; 
+FastEstimator-Train: step: 9300; loss: 0.2591966; examples/sec: 2288.3; progress: 99.4%; 
+FastEstimator-Eval: step: 9360; epoch: 29; loss: 0.3396198; min_loss: 0.30433273; since_best_loss: 9; acc: 0.8742988782051282; 
+FastEstimator-Finish: step: 9360; total_time: 923.58 sec; resnet101_lr: 0.001; 

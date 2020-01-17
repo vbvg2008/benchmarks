@@ -1,0 +1,409 @@
+2020-01-07 05:38:04.065831: I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2020-01-07 05:38:04.096892: I tensorflow/core/platform/profile_utils/cpu_utils.cc:94] CPU Frequency: 3799545000 Hz
+2020-01-07 05:38:04.097754: I tensorflow/compiler/xla/service/service.cc:168] XLA service 0x4ae6bb0 executing computations on platform Host. Devices:
+2020-01-07 05:38:04.097804: I tensorflow/compiler/xla/service/service.cc:175]   StreamExecutor device (0): Host, Default Version
+2020-01-07 05:38:04.100863: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcuda.so.1
+2020-01-07 05:38:04.451505: I tensorflow/compiler/xla/service/service.cc:168] XLA service 0x6018ea0 executing computations on platform CUDA. Devices:
+2020-01-07 05:38:04.451555: I tensorflow/compiler/xla/service/service.cc:175]   StreamExecutor device (0): GeForce GTX 1080 Ti, Compute Capability 6.1
+2020-01-07 05:38:04.452416: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1618] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.6705
+pciBusID: 0000:41:00.0
+2020-01-07 05:38:04.452638: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:04.453392: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2020-01-07 05:38:04.454085: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcufft.so.10.0
+2020-01-07 05:38:04.454241: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcurand.so.10.0
+2020-01-07 05:38:04.455127: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusolver.so.10.0
+2020-01-07 05:38:04.455794: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusparse.so.10.0
+2020-01-07 05:38:04.457907: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:04.459113: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1746] Adding visible gpu devices: 0
+2020-01-07 05:38:04.459156: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:04.460188: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1159] Device interconnect StreamExecutor with strength 1 edge matrix:
+2020-01-07 05:38:04.460200: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1165]      0 
+2020-01-07 05:38:04.460205: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1178] 0:   N 
+2020-01-07 05:38:04.461335: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1304] Created TensorFlow device (/device:GPU:0 with 10479 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:41:00.0, compute capability: 6.1)
+2020-01-07 05:38:04.761446: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1618] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.6705
+pciBusID: 0000:41:00.0
+2020-01-07 05:38:04.761515: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:04.761529: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2020-01-07 05:38:04.761539: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcufft.so.10.0
+2020-01-07 05:38:04.761550: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcurand.so.10.0
+2020-01-07 05:38:04.761560: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusolver.so.10.0
+2020-01-07 05:38:04.761569: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusparse.so.10.0
+2020-01-07 05:38:04.761589: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:04.762627: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1746] Adding visible gpu devices: 0
+2020-01-07 05:38:04.763490: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1618] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.6705
+pciBusID: 0000:41:00.0
+2020-01-07 05:38:04.763512: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:04.763523: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2020-01-07 05:38:04.763532: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcufft.so.10.0
+2020-01-07 05:38:04.763542: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcurand.so.10.0
+2020-01-07 05:38:04.763551: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusolver.so.10.0
+2020-01-07 05:38:04.763560: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusparse.so.10.0
+2020-01-07 05:38:04.763570: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:04.764595: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1746] Adding visible gpu devices: 0
+2020-01-07 05:38:04.764619: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1159] Device interconnect StreamExecutor with strength 1 edge matrix:
+2020-01-07 05:38:04.764624: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1165]      0 
+2020-01-07 05:38:04.764628: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1178] 0:   N 
+2020-01-07 05:38:04.765700: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1304] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 10479 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:41:00.0, compute capability: 6.1)
+2020-01-07 05:38:09.009267: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1618] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.6705
+pciBusID: 0000:41:00.0
+2020-01-07 05:38:09.009337: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:09.009351: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2020-01-07 05:38:09.009361: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcufft.so.10.0
+2020-01-07 05:38:09.009372: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcurand.so.10.0
+2020-01-07 05:38:09.009382: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusolver.so.10.0
+2020-01-07 05:38:09.009391: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusparse.so.10.0
+2020-01-07 05:38:09.009401: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:09.009864: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1746] Adding visible gpu devices: 0
+2020-01-07 05:38:09.009887: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1159] Device interconnect StreamExecutor with strength 1 edge matrix:
+2020-01-07 05:38:09.009892: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1165]      0 
+2020-01-07 05:38:09.009897: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1178] 0:   N 
+2020-01-07 05:38:09.010407: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1304] Created TensorFlow device (/device:GPU:0 with 10479 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:41:00.0, compute capability: 6.1)
+2020-01-07 05:38:09.014399: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1618] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.6705
+pciBusID: 0000:41:00.0
+2020-01-07 05:38:09.014425: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudart.so.10.0
+2020-01-07 05:38:09.014436: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2020-01-07 05:38:09.014446: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcufft.so.10.0
+2020-01-07 05:38:09.014456: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcurand.so.10.0
+2020-01-07 05:38:09.014465: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusolver.so.10.0
+2020-01-07 05:38:09.014475: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcusparse.so.10.0
+2020-01-07 05:38:09.014484: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:09.014942: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1746] Adding visible gpu devices: 0
+2020-01-07 05:38:09.014955: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1159] Device interconnect StreamExecutor with strength 1 edge matrix:
+2020-01-07 05:38:09.014960: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1165]      0 
+2020-01-07 05:38:09.014963: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1178] 0:   N 
+2020-01-07 05:38:09.015446: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1304] Created TensorFlow device (/device:GPU:0 with 10479 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:41:00.0, compute capability: 6.1)
+2020-01-07 05:38:09.665589: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+2020-01-07 05:38:10.460906: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+    ______           __  ______     __  _                 __            
+   / ____/___ ______/ /_/ ____/____/ /_(_)___ ___  ____ _/ /_____  _____
+  / /_  / __ `/ ___/ __/ __/ / ___/ __/ / __ `__ \/ __ `/ __/ __ \/ ___/
+ / __/ / /_/ (__  ) /_/ /___(__  ) /_/ / / / / / / /_/ / /_/ /_/ / /    
+/_/    \__,_/____/\__/_____/____/\__/_/_/ /_/ /_/\__,_/\__/\____/_/     
+                                                                        
+
+FastEstimator-Start: step: 0; total_train_steps: 28110; resnet101_lr: 1e-04; 
+FastEstimator-Train: step: 0; loss: 4.756543; 
+FastEstimator-Train: step: 100; loss: 0.9407479; examples/sec: 1257.1; progress: 0.4%; 
+FastEstimator-Train: step: 200; loss: 2.6898408; examples/sec: 1259.1; progress: 0.7%; 
+FastEstimator-Train: step: 300; loss: 0.6691848; examples/sec: 1254.9; progress: 1.1%; 
+FastEstimator-Train: step: 400; loss: 0.5854054; examples/sec: 1254.3; progress: 1.4%; 
+FastEstimator-Train: step: 500; loss: 0.577721; examples/sec: 1247.7; progress: 1.8%; 
+FastEstimator-Train: step: 600; loss: 0.6740002; examples/sec: 1251.2; progress: 2.1%; 
+FastEstimator-Train: step: 700; loss: 0.4444788; examples/sec: 1253.1; progress: 2.5%; 
+FastEstimator-Train: step: 800; loss: 0.6085043; examples/sec: 1250.6; progress: 2.8%; 
+FastEstimator-Train: step: 900; loss: 0.4337556; examples/sec: 1252.7; progress: 3.2%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 937; epoch: 0; loss: 0.4638435; min_loss: 0.46384352; since_best_loss: 0; acc: 0.827323717948718; 
+FastEstimator-Train: step: 1000; loss: 0.6630015; examples/sec: 1134.2; progress: 3.6%; 
+FastEstimator-Train: step: 1100; loss: 0.3294818; examples/sec: 1247.3; progress: 3.9%; 
+FastEstimator-Train: step: 1200; loss: 0.477132; examples/sec: 1246.9; progress: 4.3%; 
+FastEstimator-Train: step: 1300; loss: 0.3660517; examples/sec: 1249.8; progress: 4.6%; 
+FastEstimator-Train: step: 1400; loss: 0.4307934; examples/sec: 1249.3; progress: 5.0%; 
+FastEstimator-Train: step: 1500; loss: 0.5208164; examples/sec: 1242.4; progress: 5.3%; 
+FastEstimator-Train: step: 1600; loss: 0.5449354; examples/sec: 1250.0; progress: 5.7%; 
+FastEstimator-Train: step: 1700; loss: 0.4160906; examples/sec: 1258.5; progress: 6.0%; 
+FastEstimator-Train: step: 1800; loss: 0.5265396; examples/sec: 1253.8; progress: 6.4%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 1874; epoch: 1; loss: 0.3988872; min_loss: 0.39888716; since_best_loss: 0; acc: 0.8538661858974359; 
+FastEstimator-Train: step: 1900; loss: 0.4480839; examples/sec: 515.1; progress: 6.8%; 
+FastEstimator-Train: step: 2000; loss: 0.4376449; examples/sec: 1251.0; progress: 7.1%; 
+FastEstimator-Train: step: 2100; loss: 0.2464996; examples/sec: 1256.5; progress: 7.5%; 
+FastEstimator-Train: step: 2200; loss: 0.401135; examples/sec: 1257.8; progress: 7.8%; 
+FastEstimator-Train: step: 2300; loss: 0.3432221; examples/sec: 1254.0; progress: 8.2%; 
+FastEstimator-Train: step: 2400; loss: 0.4315118; examples/sec: 1246.8; progress: 8.5%; 
+FastEstimator-Train: step: 2500; loss: 0.4257006; examples/sec: 1255.2; progress: 8.9%; 
+FastEstimator-Train: step: 2600; loss: 0.2439354; examples/sec: 1262.5; progress: 9.2%; 
+FastEstimator-Train: step: 2700; loss: 0.3987711; examples/sec: 1254.1; progress: 9.6%; 
+FastEstimator-Train: step: 2800; loss: 0.4371546; examples/sec: 1249.2; progress: 10.0%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 2811; epoch: 2; loss: 0.3876196; min_loss: 0.38761958; since_best_loss: 0; acc: 0.8608774038461539; 
+FastEstimator-Train: step: 2900; loss: 0.401514; examples/sec: 437.2; progress: 10.3%; 
+FastEstimator-Train: step: 3000; loss: 0.3246004; examples/sec: 1257.1; progress: 10.7%; 
+FastEstimator-Train: step: 3100; loss: 0.3556618; examples/sec: 1255.8; progress: 11.0%; 
+FastEstimator-Train: step: 3200; loss: 0.3484164; examples/sec: 1254.3; progress: 11.4%; 
+FastEstimator-Train: step: 3300; loss: 0.4874404; examples/sec: 1251.9; progress: 11.7%; 
+FastEstimator-Train: step: 3400; loss: 0.2804426; examples/sec: 1252.0; progress: 12.1%; 
+FastEstimator-Train: step: 3500; loss: 0.3757236; examples/sec: 1252.8; progress: 12.5%; 
+FastEstimator-Train: step: 3600; loss: 0.2526868; examples/sec: 1252.2; progress: 12.8%; 
+FastEstimator-Train: step: 3700; loss: 0.1347979; examples/sec: 1258.2; progress: 13.2%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 3748; epoch: 3; loss: 0.3737106; min_loss: 0.37371057; since_best_loss: 0; acc: 0.8639823717948718; 
+FastEstimator-Train: step: 3800; loss: 0.2613364; examples/sec: 658.3; progress: 13.5%; 
+FastEstimator-Train: step: 3900; loss: 0.2443162; examples/sec: 1255.2; progress: 13.9%; 
+FastEstimator-Train: step: 4000; loss: 0.6087878; examples/sec: 1259.9; progress: 14.2%; 
+FastEstimator-Train: step: 4100; loss: 0.1999478; examples/sec: 1253.5; progress: 14.6%; 
+FastEstimator-Train: step: 4200; loss: 0.1960089; examples/sec: 1248.2; progress: 14.9%; 
+FastEstimator-Train: step: 4300; loss: 0.3172772; examples/sec: 1251.6; progress: 15.3%; 
+FastEstimator-Train: step: 4400; loss: 0.2321528; examples/sec: 1246.0; progress: 15.7%; 
+FastEstimator-Train: step: 4500; loss: 0.220249; examples/sec: 1255.6; progress: 16.0%; 
+FastEstimator-Train: step: 4600; loss: 0.29058; examples/sec: 1248.1; progress: 16.4%; 
+FastEstimator-Eval: step: 4685; epoch: 4; loss: 0.4636058; min_loss: 0.37371057; since_best_loss: 1; acc: 0.8460536858974359; 
+FastEstimator-Train: step: 4700; loss: 0.3503145; examples/sec: 608.8; progress: 16.7%; 
+FastEstimator-Train: step: 4800; loss: 0.4134624; examples/sec: 1247.9; progress: 17.1%; 
+FastEstimator-Train: step: 4900; loss: 0.3750771; examples/sec: 1254.3; progress: 17.4%; 
+FastEstimator-Train: step: 5000; loss: 0.1934182; examples/sec: 1246.9; progress: 17.8%; 
+FastEstimator-Train: step: 5100; loss: 0.3668572; examples/sec: 1253.5; progress: 18.1%; 
+FastEstimator-Train: step: 5200; loss: 0.4429657; examples/sec: 1247.5; progress: 18.5%; 
+FastEstimator-Train: step: 5300; loss: 0.4065716; examples/sec: 1241.8; progress: 18.9%; 
+FastEstimator-Train: step: 5400; loss: 0.1802075; examples/sec: 1244.6; progress: 19.2%; 
+FastEstimator-Train: step: 5500; loss: 0.3765804; examples/sec: 1245.9; progress: 19.6%; 
+FastEstimator-Train: step: 5600; loss: 0.2025692; examples/sec: 1244.2; progress: 19.9%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 5622; epoch: 5; loss: 0.3693936; min_loss: 0.36939356; since_best_loss: 0; acc: 0.8688902243589743; 
+FastEstimator-Train: step: 5700; loss: 0.3765769; examples/sec: 1240.4; progress: 20.3%; 
+FastEstimator-Train: step: 5800; loss: 0.3325054; examples/sec: 1241.6; progress: 20.6%; 
+FastEstimator-Train: step: 5900; loss: 0.3763772; examples/sec: 1237.7; progress: 21.0%; 
+FastEstimator-Train: step: 6000; loss: 0.1034736; examples/sec: 1247.1; progress: 21.3%; 
+FastEstimator-Train: step: 6100; loss: 0.3715846; examples/sec: 1245.1; progress: 21.7%; 
+FastEstimator-Train: step: 6200; loss: 0.2452704; examples/sec: 1241.0; progress: 22.1%; 
+FastEstimator-Train: step: 6300; loss: 0.2600564; examples/sec: 1247.9; progress: 22.4%; 
+FastEstimator-Train: step: 6400; loss: 0.2950013; examples/sec: 1251.1; progress: 22.8%; 
+FastEstimator-Train: step: 6500; loss: 0.3737774; examples/sec: 1246.0; progress: 23.1%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 6559; epoch: 6; loss: 0.3515942; min_loss: 0.35159415; since_best_loss: 0; acc: 0.8763020833333334; 
+FastEstimator-Train: step: 6600; loss: 0.135227; examples/sec: 804.9; progress: 23.5%; 
+FastEstimator-Train: step: 6700; loss: 0.3097691; examples/sec: 1249.5; progress: 23.8%; 
+FastEstimator-Train: step: 6800; loss: 0.4439491; examples/sec: 1241.4; progress: 24.2%; 
+FastEstimator-Train: step: 6900; loss: 0.2254235; examples/sec: 1248.5; progress: 24.5%; 
+FastEstimator-Train: step: 7000; loss: 0.1894338; examples/sec: 1244.5; progress: 24.9%; 
+FastEstimator-Train: step: 7100; loss: 0.1403497; examples/sec: 1245.2; progress: 25.3%; 
+FastEstimator-Train: step: 7200; loss: 0.2881459; examples/sec: 1249.1; progress: 25.6%; 
+FastEstimator-Train: step: 7300; loss: 0.3947238; examples/sec: 1243.7; progress: 26.0%; 
+FastEstimator-Train: step: 7400; loss: 0.1455067; examples/sec: 1245.5; progress: 26.3%; 
+FastEstimator-ModelSaver: Saving model to /tmp/tmpvg7gb7_m/resnet101_best_loss.h5
+FastEstimator-Eval: step: 7496; epoch: 7; loss: 0.3479544; min_loss: 0.34795442; since_best_loss: 0; acc: 0.8753004807692307; 
+FastEstimator-Train: step: 7500; loss: 0.2023833; examples/sec: 115.5; progress: 26.7%; 
+FastEstimator-Train: step: 7600; loss: 0.1811017; examples/sec: 1245.0; progress: 27.0%; 
+FastEstimator-Train: step: 7700; loss: 0.2899857; examples/sec: 1252.0; progress: 27.4%; 
+FastEstimator-Train: step: 7800; loss: 0.2032157; examples/sec: 1246.3; progress: 27.7%; 
+FastEstimator-Train: step: 7900; loss: 0.2688444; examples/sec: 1253.7; progress: 28.1%; 
+FastEstimator-Train: step: 8000; loss: 0.2695556; examples/sec: 1250.8; progress: 28.5%; 
+FastEstimator-Train: step: 8100; loss: 0.1678266; examples/sec: 1250.3; progress: 28.8%; 
+FastEstimator-Train: step: 8200; loss: 0.2341346; examples/sec: 1246.8; progress: 29.2%; 
+FastEstimator-Train: step: 8300; loss: 0.3477979; examples/sec: 1246.4; progress: 29.5%; 
+FastEstimator-Train: step: 8400; loss: 0.1391667; examples/sec: 1253.4; progress: 29.9%; 
+FastEstimator-Eval: step: 8433; epoch: 8; loss: 0.378731; min_loss: 0.34795442; since_best_loss: 1; acc: 0.8689903846153846; 
+FastEstimator-Train: step: 8500; loss: 0.1008786; examples/sec: 317.2; progress: 30.2%; 
+FastEstimator-Train: step: 8600; loss: 0.1334064; examples/sec: 1237.6; progress: 30.6%; 
+FastEstimator-Train: step: 8700; loss: 0.3168952; examples/sec: 1251.0; progress: 30.9%; 
+FastEstimator-Train: step: 8800; loss: 0.2168832; examples/sec: 1253.6; progress: 31.3%; 
+FastEstimator-Train: step: 8900; loss: 0.1908652; examples/sec: 1257.4; progress: 31.7%; 
+FastEstimator-Train: step: 9000; loss: 0.3241544; examples/sec: 1249.9; progress: 32.0%; 
+FastEstimator-Train: step: 9100; loss: 0.1411326; examples/sec: 1246.5; progress: 32.4%; 
+FastEstimator-Train: step: 9200; loss: 0.3383696; examples/sec: 1244.7; progress: 32.7%; 
+FastEstimator-Train: step: 9300; loss: 0.1748989; examples/sec: 1248.8; progress: 33.1%; 
+FastEstimator-Eval: step: 9370; epoch: 9; loss: 0.3654639; min_loss: 0.34795442; since_best_loss: 2; acc: 0.8713942307692307; 
+FastEstimator-Train: step: 9400; loss: 0.3404872; examples/sec: 1237.2; progress: 33.4%; 
+FastEstimator-Train: step: 9500; loss: 0.2063102; examples/sec: 1240.7; progress: 33.8%; 
+FastEstimator-Train: step: 9600; loss: 0.2270176; examples/sec: 1243.5; progress: 34.2%; 
+FastEstimator-Train: step: 9700; loss: 0.1720636; examples/sec: 1246.5; progress: 34.5%; 
+FastEstimator-Train: step: 9800; loss: 0.1290233; examples/sec: 1251.4; progress: 34.9%; 
+FastEstimator-Train: step: 9900; loss: 0.0517887; examples/sec: 1251.8; progress: 35.2%; 
+FastEstimator-Train: step: 10000; loss: 0.2714784; examples/sec: 1255.6; progress: 35.6%; 
+FastEstimator-Train: step: 10100; loss: 0.2956537; examples/sec: 1248.3; progress: 35.9%; 
+FastEstimator-Train: step: 10200; loss: 0.1688472; examples/sec: 1249.0; progress: 36.3%; 
+FastEstimator-Train: step: 10300; loss: 0.1357121; examples/sec: 1249.1; progress: 36.6%; 
+FastEstimator-Eval: step: 10307; epoch: 10; loss: 0.3514916; min_loss: 0.34795442; since_best_loss: 3; acc: 0.8793068910256411; 
+FastEstimator-Train: step: 10400; loss: 0.1879775; examples/sec: 1231.4; progress: 37.0%; 
+FastEstimator-Train: step: 10500; loss: 0.1149368; examples/sec: 1245.8; progress: 37.4%; 
+FastEstimator-Train: step: 10600; loss: 0.1314982; examples/sec: 1242.0; progress: 37.7%; 
+FastEstimator-Train: step: 10700; loss: 0.1210012; examples/sec: 1256.3; progress: 38.1%; 
+FastEstimator-Train: step: 10800; loss: 0.2559724; examples/sec: 1248.8; progress: 38.4%; 
+FastEstimator-Train: step: 10900; loss: 0.1174186; examples/sec: 1250.1; progress: 38.8%; 
+FastEstimator-Train: step: 11000; loss: 0.1424506; examples/sec: 1247.3; progress: 39.1%; 
+FastEstimator-Train: step: 11100; loss: 0.1393297; examples/sec: 1250.3; progress: 39.5%; 
+FastEstimator-Train: step: 11200; loss: 0.123476; examples/sec: 1250.3; progress: 39.8%; 
+FastEstimator-Eval: step: 11244; epoch: 11; loss: 0.3544188; min_loss: 0.34795442; since_best_loss: 4; acc: 0.8824118589743589; 
+FastEstimator-Train: step: 11300; loss: 0.0367765; examples/sec: 1244.4; progress: 40.2%; 
+FastEstimator-Train: step: 11400; loss: 0.1095788; examples/sec: 1250.1; progress: 40.6%; 
+FastEstimator-Train: step: 11500; loss: 0.1997622; examples/sec: 1250.9; progress: 40.9%; 
+FastEstimator-Train: step: 11600; loss: 0.2700559; examples/sec: 1255.3; progress: 41.3%; 
+FastEstimator-Train: step: 11700; loss: 0.1726466; examples/sec: 1249.9; progress: 41.6%; 
+FastEstimator-Train: step: 11800; loss: 0.2356165; examples/sec: 1250.2; progress: 42.0%; 
+FastEstimator-Train: step: 11900; loss: 0.2172502; examples/sec: 1256.0; progress: 42.3%; 
+FastEstimator-Train: step: 12000; loss: 0.1095621; examples/sec: 1248.5; progress: 42.7%; 
+FastEstimator-Train: step: 12100; loss: 0.2085169; examples/sec: 1250.3; progress: 43.0%; 
+FastEstimator-Eval: step: 12181; epoch: 12; loss: 0.360397; min_loss: 0.34795442; since_best_loss: 5; acc: 0.87890625; 
+FastEstimator-Train: step: 12200; loss: 0.0764865; examples/sec: 1239.4; progress: 43.4%; 
+FastEstimator-Train: step: 12300; loss: 0.1152583; examples/sec: 1241.5; progress: 43.8%; 
+FastEstimator-Train: step: 12400; loss: 0.0514225; examples/sec: 1248.3; progress: 44.1%; 
+FastEstimator-Train: step: 12500; loss: 0.1032943; examples/sec: 1247.7; progress: 44.5%; 
+FastEstimator-Train: step: 12600; loss: 0.2510506; examples/sec: 1246.1; progress: 44.8%; 
+FastEstimator-Train: step: 12700; loss: 0.0727703; examples/sec: 1246.5; progress: 45.2%; 
+FastEstimator-Train: step: 12800; loss: 0.1818873; examples/sec: 1246.6; progress: 45.5%; 
+FastEstimator-Train: step: 12900; loss: 0.1322128; examples/sec: 1245.4; progress: 45.9%; 
+FastEstimator-Train: step: 13000; loss: 0.1488584; examples/sec: 1247.7; progress: 46.2%; 
+FastEstimator-Train: step: 13100; loss: 0.2554598; examples/sec: 1246.2; progress: 46.6%; 
+FastEstimator-Eval: step: 13118; epoch: 13; loss: 0.3762446; min_loss: 0.34795442; since_best_loss: 6; acc: 0.8790064102564102; 
+FastEstimator-Train: step: 13200; loss: 0.070786; examples/sec: 1256.4; progress: 47.0%; 
+FastEstimator-Train: step: 13300; loss: 0.2064782; examples/sec: 1247.2; progress: 47.3%; 
+FastEstimator-Train: step: 13400; loss: 0.2449611; examples/sec: 1249.5; progress: 47.7%; 
+FastEstimator-Train: step: 13500; loss: 0.1468621; examples/sec: 1242.1; progress: 48.0%; 
+FastEstimator-Train: step: 13600; loss: 0.1899549; examples/sec: 1246.7; progress: 48.4%; 
+FastEstimator-Train: step: 13700; loss: 0.0738394; examples/sec: 1252.2; progress: 48.7%; 
+FastEstimator-Train: step: 13800; loss: 0.101892; examples/sec: 1251.8; progress: 49.1%; 
+FastEstimator-Train: step: 13900; loss: 0.2055907; examples/sec: 1240.8; progress: 49.4%; 
+FastEstimator-Train: step: 14000; loss: 0.2456493; examples/sec: 1245.8; progress: 49.8%; 
+FastEstimator-Eval: step: 14055; epoch: 14; loss: 0.3618765; min_loss: 0.34795442; since_best_loss: 7; acc: 0.8858173076923077; 
+FastEstimator-Train: step: 14100; loss: 0.0892745; examples/sec: 1241.5; progress: 50.2%; 
+FastEstimator-Train: step: 14200; loss: 0.1517592; examples/sec: 1247.8; progress: 50.5%; 
+FastEstimator-Train: step: 14300; loss: 0.2097255; examples/sec: 1242.8; progress: 50.9%; 
+FastEstimator-Train: step: 14400; loss: 0.0443566; examples/sec: 1245.1; progress: 51.2%; 
+FastEstimator-Train: step: 14500; loss: 0.0590792; examples/sec: 1248.1; progress: 51.6%; 
+FastEstimator-Train: step: 14600; loss: 0.1838019; examples/sec: 1249.9; progress: 51.9%; 
+FastEstimator-Train: step: 14700; loss: 0.029276; examples/sec: 1246.4; progress: 52.3%; 
+FastEstimator-Train: step: 14800; loss: 0.2520524; examples/sec: 1250.7; progress: 52.7%; 
+FastEstimator-Train: step: 14900; loss: 0.2125843; examples/sec: 1245.8; progress: 53.0%; 
+FastEstimator-Eval: step: 14992; epoch: 15; loss: 0.3917121; min_loss: 0.34795442; since_best_loss: 8; acc: 0.8843149038461539; 
+FastEstimator-Train: step: 15000; loss: 0.2518576; examples/sec: 1246.8; progress: 53.4%; 
+FastEstimator-Train: step: 15100; loss: 0.0549576; examples/sec: 1253.3; progress: 53.7%; 
+FastEstimator-Train: step: 15200; loss: 0.208568; examples/sec: 1251.0; progress: 54.1%; 
+FastEstimator-Train: step: 15300; loss: 0.0315081; examples/sec: 1247.8; progress: 54.4%; 
+FastEstimator-Train: step: 15400; loss: 0.0356963; examples/sec: 1248.7; progress: 54.8%; 
+FastEstimator-Train: step: 15500; loss: 0.1288678; examples/sec: 1247.1; progress: 55.1%; 
+FastEstimator-Train: step: 15600; loss: 0.0436468; examples/sec: 1253.3; progress: 55.5%; 
+FastEstimator-Train: step: 15700; loss: 0.0557579; examples/sec: 1249.8; progress: 55.9%; 
+FastEstimator-Train: step: 15800; loss: 0.1391053; examples/sec: 1247.6; progress: 56.2%; 
+FastEstimator-Train: step: 15900; loss: 0.132597; examples/sec: 1241.6; progress: 56.6%; 
+FastEstimator-Eval: step: 15929; epoch: 16; loss: 0.4098091; min_loss: 0.34795442; since_best_loss: 9; acc: 0.8798076923076923; 
+FastEstimator-Train: step: 16000; loss: 0.0784029; examples/sec: 1030.4; progress: 56.9%; 
+FastEstimator-Train: step: 16100; loss: 0.0306883; examples/sec: 1246.7; progress: 57.3%; 
+FastEstimator-Train: step: 16200; loss: 0.2180323; examples/sec: 1245.8; progress: 57.6%; 
+FastEstimator-Train: step: 16300; loss: 0.0477673; examples/sec: 1250.9; progress: 58.0%; 
+FastEstimator-Train: step: 16400; loss: 0.1189217; examples/sec: 1246.6; progress: 58.3%; 
+FastEstimator-Train: step: 16500; loss: 0.054415; examples/sec: 1248.4; progress: 58.7%; 
+FastEstimator-Train: step: 16600; loss: 0.0391124; examples/sec: 1247.2; progress: 59.1%; 
+FastEstimator-Train: step: 16700; loss: 0.1251304; examples/sec: 1243.5; progress: 59.4%; 
+FastEstimator-Train: step: 16800; loss: 0.0269774; examples/sec: 1249.7; progress: 59.8%; 
+FastEstimator-Eval: step: 16866; epoch: 17; loss: 0.4159899; min_loss: 0.34795442; since_best_loss: 10; acc: 0.8829126602564102; 
+FastEstimator-Train: step: 16900; loss: 0.1495781; examples/sec: 1242.9; progress: 60.1%; 
+FastEstimator-Train: step: 17000; loss: 0.1250741; examples/sec: 1246.6; progress: 60.5%; 
+FastEstimator-Train: step: 17100; loss: 0.1224026; examples/sec: 1243.4; progress: 60.8%; 
+FastEstimator-Train: step: 17200; loss: 0.1414421; examples/sec: 1253.0; progress: 61.2%; 
+FastEstimator-Train: step: 17300; loss: 0.066494; examples/sec: 1250.9; progress: 61.5%; 
+FastEstimator-Train: step: 17400; loss: 0.1434198; examples/sec: 1254.8; progress: 61.9%; 
+FastEstimator-Train: step: 17500; loss: 0.10711; examples/sec: 1253.0; progress: 62.3%; 
+FastEstimator-Train: step: 17600; loss: 0.0885572; examples/sec: 1244.5; progress: 62.6%; 
+FastEstimator-Train: step: 17700; loss: 0.1368955; examples/sec: 1245.8; progress: 63.0%; 
+FastEstimator-Train: step: 17800; loss: 0.1108393; examples/sec: 1244.1; progress: 63.3%; 
+FastEstimator-Eval: step: 17803; epoch: 18; loss: 0.4381387; min_loss: 0.34795442; since_best_loss: 11; acc: 0.8764022435897436; 
+FastEstimator-Train: step: 17900; loss: 0.1640395; examples/sec: 1247.3; progress: 63.7%; 
+FastEstimator-Train: step: 18000; loss: 0.0942567; examples/sec: 1244.9; progress: 64.0%; 
+FastEstimator-Train: step: 18100; loss: 0.1254094; examples/sec: 1248.0; progress: 64.4%; 
+FastEstimator-Train: step: 18200; loss: 0.2985636; examples/sec: 1249.6; progress: 64.7%; 
+FastEstimator-Train: step: 18300; loss: 0.0903483; examples/sec: 1244.1; progress: 65.1%; 
+FastEstimator-Train: step: 18400; loss: 0.1177713; examples/sec: 1248.4; progress: 65.5%; 
+FastEstimator-Train: step: 18500; loss: 0.1297936; examples/sec: 1248.3; progress: 65.8%; 
+FastEstimator-Train: step: 18600; loss: 0.1640125; examples/sec: 1256.2; progress: 66.2%; 
+FastEstimator-Train: step: 18700; loss: 0.1644961; examples/sec: 1247.7; progress: 66.5%; 
+FastEstimator-Eval: step: 18740; epoch: 19; loss: 0.4370496; min_loss: 0.34795442; since_best_loss: 12; acc: 0.8816105769230769; 
+FastEstimator-Train: step: 18800; loss: 0.1853442; examples/sec: 1249.4; progress: 66.9%; 
+FastEstimator-Train: step: 18900; loss: 0.0973631; examples/sec: 1250.5; progress: 67.2%; 
+FastEstimator-Train: step: 19000; loss: 0.1585327; examples/sec: 1252.1; progress: 67.6%; 
+FastEstimator-Train: step: 19100; loss: 0.0532196; examples/sec: 1247.2; progress: 67.9%; 
+FastEstimator-Train: step: 19200; loss: 0.0564072; examples/sec: 1240.6; progress: 68.3%; 
+FastEstimator-Train: step: 19300; loss: 0.2531647; examples/sec: 1244.3; progress: 68.7%; 
+FastEstimator-Train: step: 19400; loss: 0.089868; examples/sec: 1250.8; progress: 69.0%; 
+FastEstimator-Train: step: 19500; loss: 0.0404757; examples/sec: 1247.6; progress: 69.4%; 
+FastEstimator-Train: step: 19600; loss: 0.0831332; examples/sec: 1249.9; progress: 69.7%; 
+FastEstimator-Eval: step: 19677; epoch: 20; loss: 0.4110114; min_loss: 0.34795442; since_best_loss: 13; acc: 0.8790064102564102; 
+FastEstimator-Train: step: 19700; loss: 0.1350724; examples/sec: 1239.9; progress: 70.1%; 
+FastEstimator-Train: step: 19800; loss: 0.0489028; examples/sec: 1246.6; progress: 70.4%; 
+FastEstimator-Train: step: 19900; loss: 0.1267213; examples/sec: 1246.5; progress: 70.8%; 
+FastEstimator-Train: step: 20000; loss: 0.0823535; examples/sec: 1248.2; progress: 71.1%; 
+FastEstimator-Train: step: 20100; loss: 0.1392524; examples/sec: 1250.5; progress: 71.5%; 
+FastEstimator-Train: step: 20200; loss: 0.119536; examples/sec: 1242.6; progress: 71.9%; 
+FastEstimator-Train: step: 20300; loss: 0.1310346; examples/sec: 1258.1; progress: 72.2%; 
+FastEstimator-Train: step: 20400; loss: 0.0448997; examples/sec: 1246.2; progress: 72.6%; 
+FastEstimator-Train: step: 20500; loss: 0.2219052; examples/sec: 1251.6; progress: 72.9%; 
+FastEstimator-Train: step: 20600; loss: 0.2387853; examples/sec: 1242.6; progress: 73.3%; 
+FastEstimator-Eval: step: 20614; epoch: 21; loss: 0.4211621; min_loss: 0.34795442; since_best_loss: 14; acc: 0.8851161858974359; 
+FastEstimator-Train: step: 20700; loss: 0.0722208; examples/sec: 693.7; progress: 73.6%; 
+FastEstimator-Train: step: 20800; loss: 0.1495533; examples/sec: 1245.3; progress: 74.0%; 
+FastEstimator-Train: step: 20900; loss: 0.0343523; examples/sec: 1245.9; progress: 74.4%; 
+FastEstimator-Train: step: 21000; loss: 0.1064006; examples/sec: 1245.8; progress: 74.7%; 
+FastEstimator-Train: step: 21100; loss: 0.0972811; examples/sec: 1251.1; progress: 75.1%; 
+FastEstimator-Train: step: 21200; loss: 0.0934884; examples/sec: 1246.5; progress: 75.4%; 
+FastEstimator-Train: step: 21300; loss: 0.0989527; examples/sec: 1251.3; progress: 75.8%; 
+FastEstimator-Train: step: 21400; loss: 0.0088771; examples/sec: 1248.4; progress: 76.1%; 
+FastEstimator-Train: step: 21500; loss: 0.2210821; examples/sec: 1243.9; progress: 76.5%; 
+FastEstimator-Eval: step: 21551; epoch: 22; loss: 0.4184786; min_loss: 0.34795442; since_best_loss: 15; acc: 0.8866185897435898; 
+FastEstimator-Train: step: 21600; loss: 0.0666253; examples/sec: 1036.1; progress: 76.8%; 
+FastEstimator-Train: step: 21700; loss: 0.0845725; examples/sec: 1251.4; progress: 77.2%; 
+FastEstimator-Train: step: 21800; loss: 0.0774401; examples/sec: 1249.3; progress: 77.6%; 
+FastEstimator-Train: step: 21900; loss: 0.0715503; examples/sec: 1242.4; progress: 77.9%; 
+FastEstimator-Train: step: 22000; loss: 0.037278; examples/sec: 1242.6; progress: 78.3%; 
+FastEstimator-Train: step: 22100; loss: 0.2078098; examples/sec: 1248.0; progress: 78.6%; 
+FastEstimator-Train: step: 22200; loss: 0.097379; examples/sec: 1253.4; progress: 79.0%; 
+FastEstimator-Train: step: 22300; loss: 0.0920712; examples/sec: 1251.6; progress: 79.3%; 
+FastEstimator-Train: step: 22400; loss: 0.0231164; examples/sec: 1248.5; progress: 79.7%; 
+FastEstimator-Eval: step: 22488; epoch: 23; loss: 0.441487; min_loss: 0.34795442; since_best_loss: 16; acc: 0.8794070512820513; 
+FastEstimator-Train: step: 22500; loss: 0.0409793; examples/sec: 1244.4; progress: 80.0%; 
+FastEstimator-Train: step: 22600; loss: 0.0602518; examples/sec: 1244.9; progress: 80.4%; 
+FastEstimator-Train: step: 22700; loss: 0.0714885; examples/sec: 1250.7; progress: 80.8%; 
+FastEstimator-Train: step: 22800; loss: 0.0904377; examples/sec: 1241.2; progress: 81.1%; 
+FastEstimator-Train: step: 22900; loss: 0.0465306; examples/sec: 1248.2; progress: 81.5%; 
+FastEstimator-Train: step: 23000; loss: 0.24824; examples/sec: 1247.1; progress: 81.8%; 
+FastEstimator-Train: step: 23100; loss: 0.0258538; examples/sec: 1256.3; progress: 82.2%; 
+FastEstimator-Train: step: 23200; loss: 0.0612668; examples/sec: 1242.4; progress: 82.5%; 
+FastEstimator-Train: step: 23300; loss: 0.1255034; examples/sec: 1245.6; progress: 82.9%; 
+FastEstimator-Train: step: 23400; loss: 0.0588592; examples/sec: 1253.6; progress: 83.2%; 
+FastEstimator-Eval: step: 23425; epoch: 24; loss: 0.4547058; min_loss: 0.34795442; since_best_loss: 17; acc: 0.8833133012820513; 
+FastEstimator-Train: step: 23500; loss: 0.0592051; examples/sec: 1236.9; progress: 83.6%; 
+FastEstimator-Train: step: 23600; loss: 0.1423281; examples/sec: 1241.0; progress: 84.0%; 
+FastEstimator-Train: step: 23700; loss: 0.0323758; examples/sec: 1246.1; progress: 84.3%; 
+FastEstimator-Train: step: 23800; loss: 0.0634011; examples/sec: 1252.5; progress: 84.7%; 
+FastEstimator-Train: step: 23900; loss: 0.0673776; examples/sec: 1250.4; progress: 85.0%; 
+FastEstimator-Train: step: 24000; loss: 0.0718109; examples/sec: 1253.0; progress: 85.4%; 
+FastEstimator-Train: step: 24100; loss: 0.0559109; examples/sec: 1240.0; progress: 85.7%; 
+FastEstimator-Train: step: 24200; loss: 0.0449018; examples/sec: 1249.2; progress: 86.1%; 
+FastEstimator-Train: step: 24300; loss: 0.0502946; examples/sec: 1233.4; progress: 86.4%; 
+FastEstimator-Eval: step: 24362; epoch: 25; loss: 0.515293; min_loss: 0.34795442; since_best_loss: 18; acc: 0.8794070512820513; 
+FastEstimator-Train: step: 24400; loss: 0.0245212; examples/sec: 1243.5; progress: 86.8%; 
+FastEstimator-Train: step: 24500; loss: 0.0337184; examples/sec: 1241.9; progress: 87.2%; 
+FastEstimator-Train: step: 24600; loss: 0.0889327; examples/sec: 1246.2; progress: 87.5%; 
+FastEstimator-Train: step: 24700; loss: 0.038869; examples/sec: 1243.9; progress: 87.9%; 
+FastEstimator-Train: step: 24800; loss: 0.0291506; examples/sec: 1249.1; progress: 88.2%; 
+FastEstimator-Train: step: 24900; loss: 0.092027; examples/sec: 1250.0; progress: 88.6%; 
+FastEstimator-Train: step: 25000; loss: 0.2758246; examples/sec: 1244.8; progress: 88.9%; 
+FastEstimator-Train: step: 25100; loss: 0.0701652; examples/sec: 1255.2; progress: 89.3%; 
+FastEstimator-Train: step: 25200; loss: 0.0364123; examples/sec: 1241.8; progress: 89.6%; 
+FastEstimator-Eval: step: 25299; epoch: 26; loss: 0.460938; min_loss: 0.34795442; since_best_loss: 19; acc: 0.885917467948718; 
+FastEstimator-Train: step: 25300; loss: 0.0100705; examples/sec: 1249.6; progress: 90.0%; 
+FastEstimator-Train: step: 25400; loss: 0.0569164; examples/sec: 1235.5; progress: 90.4%; 
+FastEstimator-Train: step: 25500; loss: 0.0273952; examples/sec: 1248.0; progress: 90.7%; 
+FastEstimator-Train: step: 25600; loss: 0.0377225; examples/sec: 1246.8; progress: 91.1%; 
+FastEstimator-Train: step: 25700; loss: 0.2039915; examples/sec: 1246.3; progress: 91.4%; 
+FastEstimator-Train: step: 25800; loss: 0.0647374; examples/sec: 1256.1; progress: 91.8%; 
+FastEstimator-Train: step: 25900; loss: 0.1429779; examples/sec: 1243.6; progress: 92.1%; 
+FastEstimator-Train: step: 26000; loss: 0.0420664; examples/sec: 1250.7; progress: 92.5%; 
+FastEstimator-Train: step: 26100; loss: 0.0619747; examples/sec: 1250.0; progress: 92.8%; 
+FastEstimator-Train: step: 26200; loss: 0.0401391; examples/sec: 1243.4; progress: 93.2%; 
+FastEstimator-Eval: step: 26236; epoch: 27; loss: 0.427872; min_loss: 0.34795442; since_best_loss: 20; acc: 0.8893229166666666; 
+FastEstimator-Train: step: 26300; loss: 0.0827516; examples/sec: 1240.7; progress: 93.6%; 
+FastEstimator-Train: step: 26400; loss: 0.0188246; examples/sec: 1251.2; progress: 93.9%; 
+FastEstimator-Train: step: 26500; loss: 0.1514212; examples/sec: 1250.6; progress: 94.3%; 
+FastEstimator-Train: step: 26600; loss: 0.0492539; examples/sec: 1244.7; progress: 94.6%; 
+FastEstimator-Train: step: 26700; loss: 0.0265505; examples/sec: 1245.6; progress: 95.0%; 
+FastEstimator-Train: step: 26800; loss: 0.0467014; examples/sec: 1245.6; progress: 95.3%; 
+FastEstimator-Train: step: 26900; loss: 0.13626; examples/sec: 1259.4; progress: 95.7%; 
+FastEstimator-Train: step: 27000; loss: 0.0681186; examples/sec: 1250.0; progress: 96.1%; 
+FastEstimator-Train: step: 27100; loss: 0.0355369; examples/sec: 1250.5; progress: 96.4%; 
+FastEstimator-Eval: step: 27173; epoch: 28; loss: 0.5034508; min_loss: 0.34795442; since_best_loss: 21; acc: 0.8844150641025641; 
+FastEstimator-Train: step: 27200; loss: 0.046684; examples/sec: 1235.0; progress: 96.8%; 
+FastEstimator-Train: step: 27300; loss: 0.0427609; examples/sec: 1244.5; progress: 97.1%; 
+FastEstimator-Train: step: 27400; loss: 0.0318364; examples/sec: 1247.9; progress: 97.5%; 
+FastEstimator-Train: step: 27500; loss: 0.0442583; examples/sec: 1247.8; progress: 97.8%; 
+FastEstimator-Train: step: 27600; loss: 0.0308544; examples/sec: 1256.2; progress: 98.2%; 
+FastEstimator-Train: step: 27700; loss: 0.0213888; examples/sec: 1253.2; progress: 98.5%; 
+FastEstimator-Train: step: 27800; loss: 0.024532; examples/sec: 1248.9; progress: 98.9%; 
+FastEstimator-Train: step: 27900; loss: 0.066254; examples/sec: 1251.4; progress: 99.3%; 
+FastEstimator-Train: step: 28000; loss: 0.1573706; examples/sec: 1241.8; progress: 99.6%; 
+FastEstimator-Train: step: 28100; loss: 0.0382585; examples/sec: 1248.2; progress: 100.0%; 
+FastEstimator-Eval: step: 28110; epoch: 29; loss: 0.4860522; min_loss: 0.34795442; since_best_loss: 22; acc: 0.8861177884615384; 
+FastEstimator-Finish: step: 28110; total_time: 1667.89 sec; resnet101_lr: 1e-04; 
