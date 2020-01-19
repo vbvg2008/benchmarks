@@ -16,13 +16,13 @@ Estimator:
 
 Filtering Logics:
 
-Given: 
+Given:
 * Network all inputs & ouputs (on epoch basis)
 * Pipeline all inputs & outputs (on epoch basis)
 
 Get Trace inputs -> Get Network net outputs & inputs -> Get Pipeline net outputs
 
-Get 
+Get
 
 
 pipeline.benchmark()
@@ -39,8 +39,9 @@ network.transform()
 
 
 ### to do list:
+* Re-factor pipeline functional API
 
-6. add scheduling functionality
+* add scheduling functionality
 
 7. do benchmark on single gpu speed
 
@@ -53,8 +54,6 @@ network.transform()
 notebook usecase: ?
 
 estimator.fit, then fit again?
-
-
 
 ## Scheduler ideas:
 
@@ -79,11 +78,5 @@ still needs warm-up
 
 
 * TVM? Ray?
-
-
-
-## Today:
-* finish new pipeline and scheduling
- 
 
 
