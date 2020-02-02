@@ -39,15 +39,20 @@ network.transform()
 
 
 ### to do list:
-* Re-factor pipeline functional API
+* sort through pipeline key logging & filtering functionalities
 
-* add scheduling functionality
+* add scheduling functionality:
+    * even & odd scheduler
+    * functional scheduelr
+    * epoch scheduler?
+
+
+* make it notebook friendly
 
 7. do benchmark on single gpu speed
 
 8. add multi-gpu, do benchmark
 
-* make it notebook friendly
 
 ## board
 
@@ -79,4 +84,11 @@ still needs warm-up
 
 * TVM? Ray?
 
+Scheduler:
+* Epoch Scheduler
+* Repeat Scheduler
+*
+
+
+How to do patching in pytorch?
 
