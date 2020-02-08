@@ -1,7 +1,8 @@
 
 ### to do list:
 
-* modify key checking with modes
+* add network scheduling
+* provide warm-up functionality
 
 7. do benchmark on single gpu speed
 
@@ -29,9 +30,9 @@ lr schedule
 
 
 * TVM? Ray?
-
-    0. get pipeline all outputs (by creating iterator on the fly) - done
-    1. get network all outputs  - done
+for mode in modes:
+    0. get pipeline all outputs
+    1. get network all outputs
     2. get network effective inputs (using certain algorithm: two sets are involved)
     3. assert T_inputs is member of  U(P_outputs, N_outputs)
     4. get network effective output:  Inter(T_inputs, N_outputs)
@@ -47,7 +48,7 @@ estimator.fit, then fit again?
 * How to do patching in pytorch?
 * tensorflow dataset sometimes stuck at evaluation
 * consider dropping the typing in development
-
+* should we still consider the concatenation ops rule?
 
 ## ideas
 
@@ -86,3 +87,41 @@ pipeline.transform()
 
 network.show_results(pipeline=pipeline, epoch=0, mode="train")
 network.transform()
+
+
+
+
+# key improvements:
+
+* Overall:
+1. Both TF and Pytorch users are welcome
+2. now notebook friendly
+3. less API, more intuitive
+
+* Pipeline
+2. Pipeline is now pure numpy! good for debugging!
+3. pipeline is purely dynamic (no disk writing/reading anymore)
+4. pipleine can still take tf.dataset and torch.loader
+5. can use pipeline for a lot more than training itself (including model testing, pure augmentation)
+
+
+* Network:
+1. better memory control:  CPU -> control -> GPU ->control -> CPU
+
+Estimator:
+1. Trace now has inputs,
+2. Key check (including checking Trace)
+3. Trace now has a unified system object to
+4. we still have warm up!
+
+Schedule:
+3 Different kinds of scheduling available
+
+Still needed:
+* more API polishment
+* multi-gpu
+* update all tutorials
+* update all apphubs
+* doc strings
+
+
