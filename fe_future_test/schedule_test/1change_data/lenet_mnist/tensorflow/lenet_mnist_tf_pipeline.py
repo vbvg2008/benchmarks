@@ -59,7 +59,7 @@ def get_estimator():
             1: get_tensorflow_dataset(x=np.expand_dims(x_eval, -1), y=y_eval)
         })
     pipeline = fe.Pipeline(train_data=schedule1, eval_data=schedule2, batch_size=None)
-    pdb.set_trace()
+    # pdb.set_trace()
     # step 2
     model = fe.build(model=LeNet(), optimizer="adam")
     network = fe.Network(ops=[

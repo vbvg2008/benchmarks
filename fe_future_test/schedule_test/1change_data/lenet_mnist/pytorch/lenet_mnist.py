@@ -19,10 +19,11 @@ import tensorflow as tf
 import fastestimator as fe
 from fastestimator.architecture.pytorch import LeNet
 from fastestimator.dataset import NumpyDataset
-from fastestimator.op.numpyop import Minmax, ExpandDims
+from fastestimator.op.numpyop import ExpandDims, Minmax
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
+from fastestimator.schedule import EpochScheduler, RepeatScheduler
 from fastestimator.trace.metric import Accuracy
 
 
@@ -36,12 +37,17 @@ def get_estimator(batch_size=32):
                         batch_size=batch_size,
                         ops=[ExpandDims(inputs="x", outputs="x", axis=0), Minmax(inputs="x", outputs="x")])
     # step 2
-    model = fe.build(model=LeNet(), optimizer="adam")
-    network = fe.Network(ops=[
-        ModelOp(model=model, inputs="x", outputs="y_pred"),
-        CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
-        UpdateOp(model=model, loss_name="ce")
+    model1 = fe.build(model=LeNet(), optimizer="adam")
+    model2 = fe.build(model=LeNet(), optimizer="adam")
+    schedule5 = RepeatScheduler(repeat_list=[
+        ModelOp(model=model1, inputs="x", outputs="y_pred"), ModelOp(model=model2, inputs="x", outputs="y_pred")
     ])
+    schedule6 = RepeatScheduler(repeat_list=[
+        CrossEntropy(inputs=("y_pred", "y"), outputs="ce"), CrossEntropy(inputs=("y_pred", "y"), outputs="ce")
+    ])
+    schedule7 = RepeatScheduler(
+        repeat_list=[UpdateOp(model=model1, loss_name="ce"), UpdateOp(model=model2, loss_name="ce")])
+    network = fe.Network(ops=[schedule5, schedule6, schedule7])
     # step 3
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,

@@ -1,33 +1,18 @@
 
 ### to do list:
 
-* add network scheduling
+* schedule optimizer (different from scheduling model?)
 * provide warm-up functionality
+* do benchmark on single gpu to test the effect of num_cpu
+
 
 7. do benchmark on single gpu speed
 
 8. add multi-gpu, do benchmark
 
-
-
-## Scheduler ideas:
-fe.build
-    optimizers: - on network instance   worry about it later
-
-fe.network
-    ops - in Networks:        - no the fly
-
-
-lr schedule
-
-
-
 # some back log:
  Update = reduce + update
-
  gradient_Op = reduce + gradient
-
-
 
 * TVM? Ray?
 for mode in modes:
@@ -36,13 +21,6 @@ for mode in modes:
     2. get network effective inputs (using certain algorithm: two sets are involved)
     3. assert T_inputs is member of  U(P_outputs, N_outputs)
     4. get network effective output:  Inter(T_inputs, N_outputs)
-
-## notebook related
-
-notebook usecase: ?
-
-estimator.fit, then fit again?
-
 
 # issues:
 * How to do patching in pytorch?
@@ -102,17 +80,17 @@ network.transform()
 2. Pipeline is now pure numpy! good for debugging!
 3. pipeline is purely dynamic (no disk writing/reading anymore)
 4. pipleine can still take tf.dataset and torch.loader
-5. can use pipeline for a lot more than training itself (including model testing, pure augmentation)
+5. can use pipeline for a lot more than training itself (data generation, model testing ...)
 
 
 * Network:
-1. better memory control:  CPU -> control -> GPU ->control -> CPU
+1. better data memory control:  CPU -> control -> GPU ->control -> CPU
 
 Estimator:
 1. Trace now has inputs,
 2. Key check (including checking Trace)
 3. Trace now has a unified system object to
-4. we still have warm up!
+4. we still have warm up
 
 Schedule:
 3 Different kinds of scheduling available
