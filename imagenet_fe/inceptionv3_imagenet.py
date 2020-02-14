@@ -45,7 +45,7 @@ def prepare_imagenet_csv(data_folder):
     return csv_paths[0], csv_paths[1]
 
 
-def get_estimator(data_folder="/data/data/ImageNet2012", model_dir=tempfile.mkdtemp()):
+def get_estimator(data_folder="/data/data/ImageNet", model_dir=tempfile.mkdtemp()):
     #step 0: make sure the data is downloaded to data_folder
     train_csv, val_csv = prepare_imagenet_csv(data_folder)
     #step 1: pipeline
@@ -59,7 +59,7 @@ def get_estimator(data_folder="/data/data/ImageNet2012", model_dir=tempfile.mkdt
     # step 2: Network
     model = fe.build(model_def=lambda: tf.keras.applications.InceptionV3(weights=None),
                      model_name="inceptionv3",
-                     optimizer="adam",
+                     optimizer="sgd",
                      loss_name="final_loss")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="image", outputs="y_pred"),

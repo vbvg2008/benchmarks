@@ -54,8 +54,9 @@ def get_estimator(batch_size=32):
                         ops=[ExpandDims(inputs="x", outputs="x"), schedule4])
     # pdb.set_trace()
     # step 2
-    model1 = fe.build(model=LeNet(), optimizer="adam")
-    model2 = fe.build(model=LeNet(), optimizer="adam")
+    tf_model = LeNet()
+    model1 = fe.build(model=tf_model, optimizer="sgd")
+    model2 = fe.build(model=tf_model, optimizer="adam")
     schedule5 = RepeatScheduler(repeat_list=[
         ModelOp(model=model1, inputs="x", outputs="y_pred"), ModelOp(model=model2, inputs="x", outputs="y_pred")
     ])

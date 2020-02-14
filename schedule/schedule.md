@@ -1,13 +1,6 @@
 
 ### to do list:
 
-* schedule optimizer (different from scheduling model?)
-* provide warm-up functionality
-* do benchmark on single gpu to test the effect of num_cpu
-
-
-7. do benchmark on single gpu speed
-
 8. add multi-gpu, do benchmark
 
 # some back log:
@@ -27,39 +20,9 @@ for mode in modes:
 * tensorflow dataset sometimes stuck at evaluation
 * consider dropping the typing in development
 * should we still consider the concatenation ops rule?
+* need to improve the tensorflow model schedule GPU memory usage
 
 ## ideas
-
-Pipeline:
-	- output filter mechanism, only output what's used by Network and Trace
-
-
-Network:
-	- input filter mechanism, only send network related data to gpu
-	- output filter mechanism, only return Trace inputs from gpu to cpu - prediction
-
-Estimator:
-	- Collect Trace
-	batch (from cpu) prediction(from gpu)
-
-
-
-Filtering Logics:
-
-Given:
-* Network all inputs & ouputs (on epoch basis)
-* Pipeline all inputs & outputs (on epoch basis)
-
-Get Trace inputs -> Get Network net outputs & inputs -> Get Pipeline net outputs
-
-Get
-
-
-pipeline.benchmark()
-it = pipeline.get_iterator(epoch=0, mode="train")
-len(it)
-it[0]
-
 pipeline.transform()
 
 
@@ -67,36 +30,8 @@ network.show_results(pipeline=pipeline, epoch=0, mode="train")
 network.transform()
 
 
-
-
-# key improvements:
-
-* Overall:
-1. Both TF and Pytorch users are welcome
-2. now notebook friendly
-3. less API, more intuitive
-
-* Pipeline
-2. Pipeline is now pure numpy! good for debugging!
-3. pipeline is purely dynamic (no disk writing/reading anymore)
-4. pipleine can still take tf.dataset and torch.loader
-5. can use pipeline for a lot more than training itself (data generation, model testing ...)
-
-
-* Network:
-1. better data memory control:  CPU -> control -> GPU ->control -> CPU
-
-Estimator:
-1. Trace now has inputs,
-2. Key check (including checking Trace)
-3. Trace now has a unified system object to
-4. we still have warm up
-
-Schedule:
-3 Different kinds of scheduling available
-
 Still needed:
-* more API polishment
+* more API polishing
 * multi-gpu
 * update all tutorials
 * update all apphubs
