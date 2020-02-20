@@ -15,10 +15,11 @@
 """This example showcase FastEstimator usage for tensorflow users. In this file, we use tf.dataset as data input.
 """
 import tensorflow as tf
+from tensorflow.python.keras import layers
 
 import fastestimator as fe
-from fastestimator.architecture.tensorflow import LeNet
 from fastestimator.dataset import NumpyDataset
+from fastestimator.dataset.data.cifar10 import load_data
 from fastestimator.op import NumpyOp
 from fastestimator.op.numpyop import Normalize
 from fastestimator.op.tensorop.loss import CrossEntropy
@@ -27,11 +28,50 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 
 
+def residual(x, num_channel):
+    x = layers.Conv2D(num_channel, 3)(x)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    x = layers.Conv2D(num_channel, 3)(x)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    return x
+
+
+def my_model():
+    #prep layers
+    inp = layers.Input(input_shape=(32, 32, 3))
+    x = layers.Conv2D(64, 3, )(inp)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    #layer1
+    x = layers.Conv2D(128, 3)(x)
+    x = layers.MaxPool2D()(x)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    x = layers.Add()[x, residual(x, 128)]
+    #layer2
+    x = layers.Conv2D(256, 3)(x)
+    x = layers.MaxPool2D()(x)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    #layer3
+    x = layers.Conv2D(512, 3)(x)
+    x = layers.MaxPool2D()(x)
+    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.LeakyReLU(alpha=0.1)(x)
+    x = layers.Add()[x, residual(x, 512)]
+    #layers4
+    x = layers.GlobalMaxPool2D()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(10, activation='softmax')
+    model = tf.keras.Model(inputs=inp, outputs=x)
+    return model
+
+
 def get_estimator():
     # step 1
-    (x_train, y_train), (x_eval, y_eval) = tf.keras.datasets.cifar10.load_data()
-    train_data = NumpyDataset({"x": x_train, "y": y_train})
-    test_data = NumpyDataset({"x": x_eval, "y": y_eval})
+    train_data, test_data = load_data()
     pipeline = Pipeline(
         train_data=train_data,
         test_data=test_data,
@@ -39,7 +79,7 @@ def get_estimator():
         ops=Normalize(inputs="x", outputs="x", mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616)))
 
     # step 2
-    model = fe.build(model=LeNet(input_shape=(32, 32, 3)), optimizer="adam")
+    model = fe.build(model=my_model(), optimizer="sgd")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
