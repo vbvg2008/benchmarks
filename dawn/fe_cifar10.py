@@ -16,6 +16,7 @@
 """
 import tensorflow as tf
 from tensorflow.python.keras import layers
+from tensorflow.python.keras.regularizers import l2
 
 import fastestimator as fe
 from fastestimator.dataset import NumpyDataset
@@ -28,43 +29,43 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 
 
-def residual(x, num_channel):
-    x = layers.Conv2D(num_channel, 3)(x)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+def residual(x, num_channel, c=0.128):
+    x = layers.Conv2D(num_channel, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
-    x = layers.Conv2D(num_channel, 3)(x)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.Conv2D(num_channel, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
     return x
 
 
-def my_model():
+def my_model(c=0.128):
     #prep layers
-    inp = layers.Input(input_shape=(32, 32, 3))
-    x = layers.Conv2D(64, 3, )(inp)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+    inp = layers.Input(shape=(32, 32, 3))
+    x = layers.Conv2D(64, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(inp)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
     #layer1
-    x = layers.Conv2D(128, 3)(x)
+    x = layers.Conv2D(128, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
     x = layers.MaxPool2D()(x)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
-    x = layers.Add()[x, residual(x, 128)]
+    x = layers.Add()([x, residual(x, 128)])
     #layer2
-    x = layers.Conv2D(256, 3)(x)
+    x = layers.Conv2D(256, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
     x = layers.MaxPool2D()(x)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
     #layer3
-    x = layers.Conv2D(512, 3)(x)
+    x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
     x = layers.MaxPool2D()(x)
-    x = layers.BatchNormalization(momentum=0.8)(x)
+    x = layers.BatchNormalization(momentum=0.8, beta_regularizer=l2(c), gamma_regularizer=l2(c))(x)
     x = layers.LeakyReLU(alpha=0.1)(x)
-    x = layers.Add()[x, residual(x, 512)]
+    x = layers.Add()([x, residual(x, 512)])
     #layers4
     x = layers.GlobalMaxPool2D()(x)
     x = layers.Flatten()(x)
-    x = layers.Dense(10, activation='softmax')
+    x = layers.Dense(10, activation='softmax', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
     model = tf.keras.Model(inputs=inp, outputs=x)
     return model
 
