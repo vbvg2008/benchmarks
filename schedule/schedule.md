@@ -1,7 +1,7 @@
 
 ### to do list:
-
-8. add multi-gpu, do benchmark
+* try the one batch vs two update batch
+* add multi-gpu, do benchmark
 
 # some back log:
  Update = reduce + update
@@ -17,9 +17,6 @@ for mode in modes:
 
 # issues:
 * How to do patching in pytorch?
-* tensorflow dataset sometimes stuck at evaluation
-* consider dropping the typing in development
-* should we still consider the concatenation ops rule?
 * need to improve the tensorflow model schedule GPU memory usage
 
 ## ideas
@@ -36,5 +33,7 @@ Still needed:
 * update all tutorials
 * update all apphubs
 * doc strings
+
+How to do inferencing?
 
 
