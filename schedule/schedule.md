@@ -1,7 +1,12 @@
 
 ### to do list:
-* try the one batch vs two update batch
 * add multi-gpu, do benchmark
+
+* group convolution -> try same parameter
+
+* increase effective batch size functionality
+
+
 
 # some back log:
  Update = reduce + update
@@ -14,6 +19,9 @@ for mode in modes:
     2. get network effective inputs (using certain algorithm: two sets are involved)
     3. assert T_inputs is member of  U(P_outputs, N_outputs)
     4. get network effective output:  Inter(T_inputs, N_outputs)
+
+* Introduce FE to Academia in Europe
+
 
 # issues:
 * How to do patching in pytorch?
