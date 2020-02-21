@@ -1,7 +1,12 @@
 
 ### to do list:
 
-8. add multi-gpu, do benchmark
+* take care of tensor ranks when using generator
+* 
+
+
+
+* add multi-gpu, do benchmark
 
 # some back log:
  Update = reduce + update

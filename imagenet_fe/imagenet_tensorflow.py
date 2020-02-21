@@ -3,7 +3,6 @@ import pdb
 import cv2
 import numpy as np
 import tensorflow as tf
-from torchvision.models import inception_v3
 
 import fastestimator as fe
 from fastestimator.architecture.tensorflow import LeNet
@@ -15,6 +14,7 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
+from torchvision.models import inception_v3
 
 # from labeled_dir_dataset import LabeledDirDataset
 
