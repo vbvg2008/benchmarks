@@ -1,12 +1,12 @@
 
 ### to do list:
-
-* take care of tensor ranks when using generator
-* 
-
-
-
 * add multi-gpu, do benchmark
+
+* group convolution -> try same parameter
+
+* increase effective batch size functionality
+
+
 
 # some back log:
  Update = reduce + update
@@ -20,11 +20,11 @@ for mode in modes:
     3. assert T_inputs is member of  U(P_outputs, N_outputs)
     4. get network effective output:  Inter(T_inputs, N_outputs)
 
+* Introduce FE to Academia in Europe
+
+
 # issues:
 * How to do patching in pytorch?
-* tensorflow dataset sometimes stuck at evaluation
-* consider dropping the typing in development
-* should we still consider the concatenation ops rule?
 * need to improve the tensorflow model schedule GPU memory usage
 
 ## ideas
@@ -41,5 +41,7 @@ Still needed:
 * update all tutorials
 * update all apphubs
 * doc strings
+
+How to do inferencing?
 
 
