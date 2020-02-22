@@ -7,15 +7,17 @@ ds = tf.data.Dataset.from_tensor_slices(data)
 # ds = ds.repeat()
 ds = ds.shuffle(10)
 
-it = iter(ds)
 # sample_data = next(it)
 # print(sample_data)
 
-# pdb.set_trace()
+it = iter(ds)
 print("===")
-for ele in it:
-    print(ele)
+while True:
+    try:
+        print(next(it))
+    except StopIteration:
+        break
 
 print("===")
-for ele in it:
+for ele in ds:
     print(ele)

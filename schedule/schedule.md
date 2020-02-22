@@ -1,6 +1,12 @@
 
 ### to do list:
-* add multi-gpu, do benchmark
+
+* multi-gpu in training
+
+* multi-gpu in testing
+
+* multi-gpu benchmark
+
 
 * group convolution -> try same parameter
 
