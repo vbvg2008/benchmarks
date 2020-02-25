@@ -2,7 +2,16 @@
 ### to do list:
 
 
-* multi-gpu benchmark
+* create product data type conversion script -> upload data
+
+* pytorch multi-gpu training
+
+* update GAN example
+
+* do normalized conv
+
+
+
 
 * increase effective batch size functionality
 
@@ -37,8 +46,6 @@ for mode in modes:
 
 ## ideas
 pipeline.transform()
-
-
 network.show_results(pipeline=pipeline, epoch=0, mode="train")
 network.transform()
 

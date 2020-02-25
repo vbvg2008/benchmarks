@@ -18,6 +18,7 @@ import pdb
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 from tensorflow.python.keras import backend, layers
 from tensorflow.python.keras.regularizers import l2
 
@@ -32,7 +33,10 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace import Trace
 from fastestimator.trace.metric import Accuracy
 
-Batch = 256
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_policy(policy)
+
+Batch = 512
 Epoch = 24
 Warmup = 5
 STEPS_PER_EPOCH = 50000 // Batch + 1
@@ -94,7 +98,8 @@ def my_model(c=5e-4 * Batch):
     #layers4
     x = layers.GlobalMaxPool2D()(x)
     x = layers.Flatten()(x)
-    x = layers.Dense(10, activation='softmax', kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
+    x = layers.Dense(10, kernel_regularizer=l2(c), bias_regularizer=l2(c))(x)
+    x = layers.Activation('softmax', dtype='float32')(x)
     model = tf.keras.Model(inputs=inp, outputs=x)
     return model
 
@@ -115,7 +120,8 @@ def get_estimator():
             SmootOneHot(inputs="y", outputs="y", mode="train")
         ])
     # step 2
-    model = fe.build(model=my_model(), optimizer=tf.optimizers.SGD(0.4, momentum=0.9, nesterov=True))
+    model = fe.build(model=my_model(), optimizer="adam")
+    # pdb.set_trace()
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
@@ -125,7 +131,7 @@ def get_estimator():
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=Epoch,
-                             traces=[Accuracy(true_key="y", pred_key="y_pred"), LRChange(model=model)])
+                             traces=Accuracy(true_key="y", pred_key="y_pred"))
     return estimator
 
 

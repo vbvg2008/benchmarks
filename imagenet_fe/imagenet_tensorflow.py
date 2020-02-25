@@ -42,7 +42,7 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=80,
+        batch_size=512,
         ops=[
             ReadImage(inputs="x", outputs="x"),
             Resize(height=299, width=299, image_in="x", image_out="x"),
