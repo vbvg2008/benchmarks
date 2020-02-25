@@ -1,16 +1,16 @@
 
 ### to do list:
 
-* multi-gpu in training
-
-* multi-gpu in testing
 
 * multi-gpu benchmark
 
-
-* group convolution -> try same parameter
-
 * increase effective batch size functionality
+
+* mixed precision
+
+
+
+
 
 
 
@@ -32,6 +32,8 @@ for mode in modes:
 # issues:
 * How to do patching in pytorch?
 * need to improve the tensorflow model schedule GPU memory usage
+* understand tensorflow gpu usage
+* tensorflow make distributed value needs to change
 
 ## ideas
 pipeline.transform()
