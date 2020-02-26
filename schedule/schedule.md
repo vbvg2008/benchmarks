@@ -43,6 +43,11 @@ for mode in modes:
 * need to improve the tensorflow model schedule GPU memory usage
 * understand tensorflow gpu usage
 * tensorflow make distributed value needs to change
+* how to pad tensor in dataloder
+* how to select certain distribution of labels within batch in data loader
+* how to do patching in data loader
+
+
 
 ## ideas
 pipeline.transform()
