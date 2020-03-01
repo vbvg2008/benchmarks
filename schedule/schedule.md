@@ -1,7 +1,21 @@
 
 ### to do list:
 
-* update GAN example
+* merge f1 score
+
+* merge dataset
+
+* refactor ModelSaver
+
+* finish GAN example
+
+* finish dnn example
+
+* add ModelSaver to all examples
+
+
+
+
 
 
 * pytorch multi-gpu training
