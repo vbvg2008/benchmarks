@@ -1,11 +1,13 @@
 
 ### to do list:
 
-* merge f1 score
-
-* merge dataset
-
 * refactor ModelSaver
+
+modelSaver on best accuracy, loss
+
+* save on loss
+
+* load model
 
 * finish GAN example
 
@@ -14,7 +16,7 @@
 * add ModelSaver to all examples
 
 
-
+* clear out all imports
 
 
 
