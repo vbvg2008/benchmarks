@@ -1,25 +1,6 @@
 
 ### to do list:
 
-* refactor ModelSaver
-
-modelSaver on best accuracy, loss
-
-* save on loss
-
-* load model
-
-* finish GAN example
-
-* finish dnn example
-
-* add ModelSaver to all examples
-
-
-* clear out all imports
-
-
-
 * pytorch multi-gpu training
 
 
