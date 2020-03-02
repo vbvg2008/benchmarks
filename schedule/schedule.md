@@ -1,16 +1,14 @@
 
 ### to do list:
 
-
-* create product data type conversion script -> upload data
-
 * pytorch multi-gpu training
 
-* update GAN example
 
 * do normalized conv
 
+* refactor all ops code
 
+* refactor all datasets
 
 
 * increase effective batch size functionality

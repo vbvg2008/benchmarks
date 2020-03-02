@@ -38,7 +38,7 @@ def get_estimator():
     model = fe.build(model=inception_v3(aux_logits=False), optimizer="sgd")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
-        CrossEntropy(inputs=("y_pred", "y"), outputs="ce", apply_softmax=True),
+        CrossEntropy(inputs=("y_pred", "y"), outputs="ce", from_logits=True),
         UpdateOp(model=model, loss_name="ce")
     ])
 
