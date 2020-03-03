@@ -1,8 +1,8 @@
 
 ### to do list:
-
 * pytorch multi-gpu training
 
+* how to enable the lambda function
 
 * do normalized conv
 
@@ -10,14 +10,15 @@
 
 * refactor all datasets
 
-
 * increase effective batch size functionality
 
 * mixed precision
 
+* imbalanced batching behavior (both probability and deterministic) - expand dim, then collate dim in batch
 
+* dataset padding (like object detection)
 
-
+* dataset patching
 
 
 
@@ -37,13 +38,13 @@ for mode in modes:
 
 
 # issues:
-* How to do patching in pytorch?
+* How to do patching ?
 * need to improve the tensorflow model schedule GPU memory usage
 * understand tensorflow gpu usage
 * tensorflow make distributed value needs to change
 * how to pad tensor in dataloder
 * how to select certain distribution of labels within batch in data loader
-* how to do patching in data loader
+
 
 
 

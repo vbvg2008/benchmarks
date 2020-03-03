@@ -44,6 +44,7 @@ if __name__ == "__main__":
                         batch_size=50,
                         ops=[ExpandDims(inputs="x", outputs="x", axis=0), Minmax(inputs="x", outputs="x")])
     model = LeNet()
+    pdb.set_trace()
     model = nn.DataParallel(model)
     model.to(device)
     loader = pipeline.get_loader("train", 0)
