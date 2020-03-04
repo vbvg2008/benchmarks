@@ -14,7 +14,7 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
-from torchvision.models import inception_v3
+from torchvision.models import resnet50
 
 
 class Scale(NumpyOp):
@@ -28,14 +28,14 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=128,
+        batch_size=400,
         ops=[
             ReadImage(inputs="x", outputs="x"),
-            Resize(height=299, width=299, image_in="x", image_out="x"),
+            Resize(height=224, width=224, image_in="x", image_out="x"),
             Scale(inputs="x", outputs="x")
         ])
 
-    model = fe.build(model=inception_v3(aux_logits=False), optimizer="sgd")
+    model = fe.build(model_fn=resnet50, optimizer_fn="adam")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce", from_logits=True),

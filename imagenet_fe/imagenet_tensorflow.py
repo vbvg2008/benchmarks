@@ -4,8 +4,6 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
-# from labeled_dir_dataset import LabeledDirDataset
-from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 import fastestimator as fe
 from fastestimator.architecture.tensorflow import LeNet
@@ -18,13 +16,26 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
 
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_policy(policy)
+# from labeled_dir_dataset import LabeledDirDataset
+# from tensorflow.keras.mixed_precision import experimental as mixed_precision
+
+# policy = mixed_precision.Policy('mixed_float16')
+# mixed_precision.set_policy(policy)
 
 
 def my_inceptionv3():
     inputs = layers.Input(shape=(299, 299, 3))
     backbone = tf.keras.applications.InceptionV3(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
+    x = backbone.outputs[0]
+    x = layers.Dense(1000)(x)
+    outputs = layers.Activation('softmax', dtype='float32')(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
+def my_resnet50():
+    inputs = layers.Input(shape=(224, 224, 3))
+    backbone = tf.keras.applications.ResNet50(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
     x = backbone.outputs[0]
     x = layers.Dense(1000)(x)
     outputs = layers.Activation('softmax', dtype='float32')(x)
@@ -42,15 +53,15 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=512,
+        batch_size=400,
         ops=[
             ReadImage(inputs="x", outputs="x"),
-            Resize(height=299, width=299, image_in="x", image_out="x"),
+            Resize(height=224, width=224, image_in="x", image_out="x"),
             Scale(inputs="x", outputs="x")
         ])
 
     # step 2
-    model = fe.build(model=my_inceptionv3(), optimizer="adam")
+    model = fe.build(model_fn=my_resnet50, optimizer_fn="adam")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
