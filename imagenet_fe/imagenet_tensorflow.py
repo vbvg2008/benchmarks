@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+# from labeled_dir_dataset import LabeledDirDataset
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 import fastestimator as fe
 from fastestimator.architecture.tensorflow import LeNet
@@ -16,11 +18,8 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
 
-# from labeled_dir_dataset import LabeledDirDataset
-# from tensorflow.keras.mixed_precision import experimental as mixed_precision
-
-# policy = mixed_precision.Policy('mixed_float16')
-# mixed_precision.set_policy(policy)
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_policy(policy)
 
 
 def my_inceptionv3():
@@ -53,7 +52,7 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=400,
+        batch_size=256,
         ops=[
             ReadImage(inputs="x", outputs="x"),
             Resize(height=224, width=224, image_in="x", image_out="x"),

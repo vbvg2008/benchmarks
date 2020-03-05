@@ -1,8 +1,7 @@
 
 ### to do list:
-* pytorch multi-gpu training
 
-* how to enable the lambda function
+* how to better handle no input case for multi-gpu
 
 * do normalized conv
 
