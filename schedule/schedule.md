@@ -1,8 +1,5 @@
 
 ### to do list:
-
-* how to better handle no input case for multi-gpu
-
 * do normalized conv
 
 * refactor all ops code
@@ -10,6 +7,8 @@
 * refactor all datasets
 
 * increase effective batch size functionality
+
+* check both tf and pytorch results
 
 * mixed precision
 
