@@ -1,5 +1,7 @@
 
 ### to do list:
+* debug pytorch GAN
+
 * do normalized conv
 
 * refactor all ops code
@@ -8,7 +10,6 @@
 
 * increase effective batch size functionality
 
-* check both tf and pytorch results
 
 * mixed precision
 

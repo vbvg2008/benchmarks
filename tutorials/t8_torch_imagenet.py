@@ -2,15 +2,15 @@ import pdb
 import time
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
+from torchvision.models import resnet50
+
 from fastestimator.dataset import LabeledDirDataset, mnist
 from fastestimator.op import NumpyOp
 from fastestimator.op.numpyop import ExpandDims, Minmax, ReadImage, Resize
 from fastestimator.pipeline import Pipeline
-from torchvision.models import resnet50
 
 
 class Scale(NumpyOp):
@@ -20,8 +20,22 @@ class Scale(NumpyOp):
         return np.float32(data)
 
 
+def new_forward(data, model):
+    pdb.set_trace()
+    replicas = nn.parallel.replicate(model, [0, 1, 2, 3])
+    x = nn.parallel.scatter(data["x"], [0, 1, 2, 3])
+    y = nn.parallel.scatter(data["y"], [0, 1, 2, 3])
+    y_pred = nn.parallel.parallel_apply(replicas, x)
+    loss = nn.parallel.parallel_apply(criterion(y_pred, y.long()))
+    loss.backward()
+    optimizer.step()
+
+
 if __name__ == "__main__":
-    device = torch.device("cuda:0")
+    device0 = torch.device("cuda:0")
+    device1 = torch.device("cuda:1")
+    device2 = torch.device("cuda:2")
+    device3 = torch.device("cuda:3")
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
@@ -35,21 +49,20 @@ if __name__ == "__main__":
     model = resnet50()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    model = nn.DataParallel(model)
-    model.to(device)
-    loader = pipeline.get_loader("train", 0)
+    # model = nn.DataParallel(model)
+    model.to(device0)
     criterion = nn.CrossEntropyLoss()
+
+    loader = pipeline.get_loader("train", 0)
     tic = time.perf_counter()
     i = 0
     for _ in range(5):
         for data in loader:
-            # pdb.set_trace()
-            x = data["x"].to(device)
-            y = data["y"].to(device)
+            new_forward(data, model)
             # #zero the parameter gradients
             optimizer.zero_grad()
-            y_pred = model(x)
-            loss = criterion(y_pred, y.long())
+            # y_pred = model(x)
+            # loss = criterion(y_pred, y.long())
             loss.backward()
             optimizer.step()
             i += 1
