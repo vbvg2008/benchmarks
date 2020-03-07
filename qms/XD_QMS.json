@@ -1,0 +1,9 @@
+{
+    "title": "Mnist Classification QMS Test",
+    "stories": [
+        {
+            "description": "Accuracy should be above 99.5%",
+            "passed": "False"
+        }
+    ]
+}

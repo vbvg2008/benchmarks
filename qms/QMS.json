@@ -1,0 +1,9 @@
+{
+    "title": "QMSTest",
+    "stories": [
+        {
+            "description": "Accuracy should be above 90%",
+            "passed": "True"
+        }
+    ]
+}

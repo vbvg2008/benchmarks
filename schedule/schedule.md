@@ -1,6 +1,6 @@
 
 ### to do list:
-* debug pytorch GAN
+* check two update Op
 
 * do normalized conv
 

@@ -1,0 +1,17 @@
+{
+    "title": "Mnist Classification QMS Test",
+    "stories": [
+        {
+            "description": "Accuracy should be above 0.9",
+            "passed": "True"
+        },
+        {
+            "description": "MCC score should be above 0.95",
+            "passed": "True"
+        },
+        {
+            "description": "Accuracy should be above 0.95 and MCC should be below 0.9",
+            "passed": "False"
+        }
+    ]
+}
