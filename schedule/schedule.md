@@ -2,9 +2,10 @@
 ### to do list:
 * check two update Op
 
+
 * do normalized conv
 
-* refactor all ops code
+* refactor all ops code (some multi-io, some not, replay mode is annoying when multi-io)
 
 * refactor all datasets
 
