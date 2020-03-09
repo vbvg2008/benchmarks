@@ -18,8 +18,8 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
 
-policy = mixed_precision.Policy('mixed_float16')
-mixed_precision.set_policy(policy)
+# policy = mixed_precision.Policy('mixed_float16')
+# mixed_precision.set_policy(policy)
 
 
 def my_inceptionv3():
@@ -52,7 +52,7 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=64,
+        batch_size=100,
         ops=[
             ReadImage(inputs="x", outputs="x"),
             Resize(height=224, width=224, image_in="x", image_out="x"),

@@ -1,24 +1,21 @@
 
 ### to do list:
+* lr scheduler system?
+
+* reduce_lr_on_plateau?
+
 * do normalized conv
 
-* refactor all ops code (some multi-io, some not, replay mode is annoying when multi-io)
-
-* lr scheduler?
-
 * refactor all datasets
-
-* imbalanced batching behavior (both probability and deterministic) - expand dim, then collate dim in batch
-
+    * imbalanced batching behavior (both probability and deterministic) - expand dim, then collate dim in batch
+    * dataset padding (like object detection)
+    * dataset patching
 
 
 * increase effective batch size functionality
 
 * mixed precision
 
-* dataset padding (like object detection)
-
-* dataset patching
 
 
 

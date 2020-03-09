@@ -28,7 +28,7 @@ def get_estimator():
     pipeline = Pipeline(
         train_data=LabeledDirDataset("/data/data/ImageNet/train"),
         eval_data=LabeledDirDataset("/data/data/ImageNet/val"),
-        batch_size=80,
+        batch_size=128,
         ops=[
             ReadImage(inputs="x", outputs="x"),
             Resize(height=224, width=224, image_in="x", image_out="x"),
@@ -40,9 +40,6 @@ def get_estimator():
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce", from_logits=True),
         UpdateOp(model=model, loss_name="ce"),
-        ModelOp(model=model, inputs="x", outputs="y_pred2"),
-        CrossEntropy(inputs=("y_pred2", "y"), outputs="ce2", from_logits=True),
-        UpdateOp(model=model, loss_name="ce2")
     ])
 
     estimator = fe.Estimator(pipeline=pipeline,
