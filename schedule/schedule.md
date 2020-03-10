@@ -1,8 +1,6 @@
 
 ### to do list:
-* lr scheduler system?
-
-* reduce_lr_on_plateau?
+* add lr scheduling in fast-cifar
 
 * do normalized conv
 
