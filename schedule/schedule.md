@@ -1,6 +1,7 @@
 
 ### to do list:
-* add lr scheduling in fast-cifar
+
+
 
 * do normalized conv
 
@@ -8,6 +9,10 @@
     * imbalanced batching behavior (both probability and deterministic) - expand dim, then collate dim in batch
     * dataset padding (like object detection)
     * dataset patching
+
+* 
+
+
 
 
 * increase effective batch size functionality
