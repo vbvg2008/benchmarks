@@ -1,24 +1,20 @@
 
+### finished
+
+
 ### to do list:
 
-
-
-* do normalized conv
-
 * refactor all datasets
-    * imbalanced batching behavior (both probability and deterministic) - expand dim, then collate dim in batch
+    * imbalanced batching behavior (both probability and deterministic)
     * dataset padding (like object detection)
-    * dataset patching
 
-* 
-
-
-
+* pggan
 
 * increase effective batch size functionality
 
-* mixed precision
+* compression implementation
 
+* mixed precision
 
 
 
@@ -56,7 +52,6 @@ network.transform()
 
 Still needed:
 * more API polishing
-* multi-gpu
 * update all tutorials
 * update all apphubs
 * doc strings
