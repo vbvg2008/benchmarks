@@ -1,8 +1,9 @@
 
-### finished
-
-
 ### to do list:
+* create Fusion Dataset
+
+* create batchOp as metaNumpy Op
+
 
 * refactor all datasets
     * imbalanced batching behavior (both probability and deterministic)
