@@ -1,6 +1,10 @@
 
 ### to do list:
-* fix all imports in FE.
+* retinanet
+* cycle-gan
+* pggan
+* tutorial
+* try mse layer
 
 * pggan
 
