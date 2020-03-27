@@ -1,6 +1,10 @@
 
 ### to do list:
-* retinanet
+* retinanet multi-gpu
+* pad values in batchdataset
+* enable fe.xxx imports
+* get rid of temporary variables in op concatenation
+* re-design the entire key checking system
 * cycle-gan
 * pggan
 * tutorial
