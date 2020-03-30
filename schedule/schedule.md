@@ -1,23 +1,13 @@
 
 ### to do list:
-* retinanet multi-gpu
-* pad values in batchdataset
-* enable fe.xxx imports
-* get rid of temporary variables in op concatenation
-* re-design the entire key checking system
+* see if cifar can work well
 * cycle-gan
 * pggan
 * tutorial
 * try mse layer
-
-* pggan
-
 * increase effective batch size functionality
-
 * compression implementation
-
 * mixed precision
-
 
 
 # some back log:
