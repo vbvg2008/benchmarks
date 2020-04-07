@@ -1,14 +1,11 @@
 
 ### to do list:
-* see if cifar can work well
-* cycle-gan
 * pggan
-* tutorial
-* try mse layer
+* adversarial nightly test
 * increase effective batch size functionality
 * compression implementation
 * mixed precision
-
+* try mse layer
 
 # some back log:
 * TVM? Ray?
