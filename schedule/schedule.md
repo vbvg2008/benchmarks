@@ -1,9 +1,8 @@
 
 ### to do list:
+* different install requires based on OS
 * pggan notebook
 * adversarial nightly test
-* windows fe
-
 
 * increase effective batch size functionality
 * compression implementation
