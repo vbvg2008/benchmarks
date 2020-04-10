@@ -1,7 +1,6 @@
 
 ### to do list:
-* fix pytorch pggan ---> pggan notebook ---> pggan nightly test
-* different install requires based on OS
+* pggan notebook ---> pggan nightly test
 * adversarial nightly test
 
 * increase effective batch size functionality
