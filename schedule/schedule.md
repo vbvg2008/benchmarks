@@ -1,7 +1,7 @@
 
 ### to do list:
-* pggan notebook ---> pggan nightly test
-* adversarial nightly test
+* Estimator tutorial- XD
+* Next Monday FE Q1 demo - 5min
 
 * increase effective batch size functionality
 * compression implementation
@@ -10,7 +10,6 @@
 
 # some back log:
 * TVM? Ray?
-
 * Introduce FE to Academia in Europe
 
 
