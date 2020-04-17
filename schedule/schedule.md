@@ -1,6 +1,7 @@
 
 ### to do list:
-* Estimator tutorial- XD
+* advanced tutorial - dataset
+* restore optimizer state
 * Next Monday FE Q1 demo - 5min
 
 * increase effective batch size functionality
