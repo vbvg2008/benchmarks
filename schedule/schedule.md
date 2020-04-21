@@ -1,8 +1,9 @@
 
 ### to do list:
-* advanced tutorial - dataset
-* restore optimizer state
-* Next Monday FE Q1 demo - 5min
+
+* Scheduler tutorial
+* spot resume training
+
 
 * increase effective batch size functionality
 * compression implementation
