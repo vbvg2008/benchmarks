@@ -1,9 +1,14 @@
 
 ### to do list:
 
-* Scheduler tutorial
-* spot resume training
+* update scheduler tutorial
 
+* max_train_steps_per_epoch max_eval_steps_per_epoch
+
+* spot instance saving
+ model saving/loading, include_optimizer = True.
+
+* multi-gpu inferencing
 
 * increase effective batch size functionality
 * compression implementation
