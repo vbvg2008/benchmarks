@@ -1,10 +1,6 @@
 
 ### to do list:
 
-* update scheduler tutorial
-
-* max_train_steps_per_epoch max_eval_steps_per_epoch
-
 * spot instance saving
  model saving/loading, include_optimizer = True.
 
