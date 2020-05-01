@@ -1,10 +1,12 @@
 
 ### to do list:
-
-* spot instance saving
- model saving/loading, include_optimizer = True.
-
+* tensor recursive detach
 * multi-gpu inferencing
+* update readme
+
+* model saver not saving full path
+* warmup still running on previous epoch with SpotRecovery
+
 
 * increase effective batch size functionality
 * compression implementation
