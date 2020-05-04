@@ -1,6 +1,5 @@
 
 ### to do list:
-* test some sample multi-gpu call on multi-gpu
 * add pytorch and tf dependency & test them
 * deploy the api on pypi, dockerhub
 * update readme
