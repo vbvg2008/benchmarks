@@ -1,19 +1,17 @@
 
 ### to do list:
-* tensor recursive detach
-* multi-gpu inferencing
+* test some sample multi-gpu call on multi-gpu
+* add pytorch and tf dependency & test them
+* deploy the api on pypi, dockerhub
 * update readme
-
-* model saver not saving full path
-* warmup still running on previous epoch with SpotRecovery
+* find bugs on website
 
 
+# some back log:
 * increase effective batch size functionality
 * compression implementation
 * mixed precision
 * try mse layer
-
-# some back log:
 * TVM? Ray?
 * Introduce FE to Academia in Europe
 
