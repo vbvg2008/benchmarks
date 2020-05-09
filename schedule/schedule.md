@@ -1,9 +1,7 @@
 
-### to do list:
-* add pytorch and tf dependency & test them
-* deploy the api on pypi, dockerhub
-* update readme
-* find bugs on website
+* reach out to Xray(Pal), MR(Laszlo), create workshops(on )
+
+
 
 
 # some back log:
