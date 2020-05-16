@@ -1,9 +1,16 @@
 
 ### to do list:
-* add pytorch and tf dependency & test them
-* deploy the api on pypi, dockerhub
-* update readme
-* find bugs on website
+*  debug batchdataset on ptx & retrain ptx
+* archive all product code on github & create confluence page
+
+* schedule a meeting with Mri?
+
+* implement compression
+* take a look at CT code and implement
+
+
+
+
 
 
 # some back log:
