@@ -10,8 +10,9 @@ from tensorflow.keras.mixed_precision import experimental as mixed_precision
 import fastestimator as fe
 from fastestimator.architecture.tensorflow import LeNet
 from fastestimator.dataset import NumpyDataset
-from fastestimator.op import NumpyOp
-from fastestimator.op.numpyop import ReadImage, Resize
+from fastestimator.op.numpyop import NumpyOp
+from fastestimator.op.numpyop.multivariate import Resize
+from fastestimator.op.numpyop.univariate import ReadImage
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
@@ -24,7 +25,10 @@ from label_dir_dataset import LabeledDirDataset
 
 def my_inceptionv3():
     inputs = layers.Input(shape=(299, 299, 3))
-    backbone = tf.keras.applications.InceptionV3(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
+    backbone = tf.keras.applications.InceptionV3(weights=None,
+                                                 include_top=False,
+                                                 pooling='avg',
+                                                 input_tensor=inputs)
     x = backbone.outputs[0]
     x = layers.Dense(1000)(x)
     outputs = layers.Activation('softmax', dtype='float32')(x)
@@ -34,7 +38,10 @@ def my_inceptionv3():
 
 def my_resnet50():
     inputs = layers.Input(shape=(224, 224, 3))
-    backbone = tf.keras.applications.ResNet50(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
+    backbone = tf.keras.applications.ResNet50(weights=None,
+                                              include_top=False,
+                                              pooling='avg',
+                                              input_tensor=inputs)
     x = backbone.outputs[0]
     x = layers.Dense(1000)(x)
     outputs = layers.Activation('softmax', dtype='float32')(x)
