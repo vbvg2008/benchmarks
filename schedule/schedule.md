@@ -1,7 +1,9 @@
 
 ### to do list:
-* increase effective batch size functionality
+* Debug Gaussian Noise
 * mixed precision
+* Finish RetinaNet
+* increase effective batch size functionality
 * autoML
 
 
