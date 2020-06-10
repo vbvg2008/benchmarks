@@ -12,7 +12,11 @@ x_neg = list(range(1000, 1300))
 y_neg = [0] * 300
 ds_neg = fe.dataset.NumpyDataset(data={"x": x_neg, "y": y_neg})
 
-train_ds = fe.dataset.BatchDataset(datasets=[ds_pos, ds_neg], num_samples=[10, 4])
+x_unid = list(range(1300, 1600))
+y_unid = [2] * 300
+ds_unid = fe.dataset.NumpyDataset(data={"x": x_unid, "y": y_unid})
+
+train_ds = fe.dataset.BatchDataset(datasets=[ds_pos, ds_neg, ds_unid], num_samples=[10, 4, 4])
 pipeline = fe.Pipeline(train_data=train_ds)
 
 for epoch in range(1, 10):
@@ -22,6 +26,7 @@ for epoch in range(1, 10):
         labels = list(data["y"].numpy())
         assert labels.count(1) == 10
         assert labels.count(0) == 4
+        assert labels.count(2) == 4
         example.extend(data["x"].numpy())
     print("========epoch {}=========".format(epoch))
     print("histogram:")

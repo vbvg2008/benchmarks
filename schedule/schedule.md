@@ -1,6 +1,5 @@
 
 ### to do list:
-* Debug Gaussian Noise
 * mixed precision
 * Finish RetinaNet
 * increase effective batch size functionality
