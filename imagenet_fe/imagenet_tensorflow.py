@@ -19,16 +19,13 @@ from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
 from label_dir_dataset import LabeledDirDataset
 
-# policy = mixed_precision.Policy('mixed_float16')
-# mixed_precision.set_policy(policy)
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_policy(policy)
 
 
 def my_inceptionv3():
     inputs = layers.Input(shape=(299, 299, 3))
-    backbone = tf.keras.applications.InceptionV3(weights=None,
-                                                 include_top=False,
-                                                 pooling='avg',
-                                                 input_tensor=inputs)
+    backbone = tf.keras.applications.InceptionV3(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
     x = backbone.outputs[0]
     x = layers.Dense(1000)(x)
     outputs = layers.Activation('softmax', dtype='float32')(x)
@@ -38,10 +35,7 @@ def my_inceptionv3():
 
 def my_resnet50():
     inputs = layers.Input(shape=(224, 224, 3))
-    backbone = tf.keras.applications.ResNet50(weights=None,
-                                              include_top=False,
-                                              pooling='avg',
-                                              input_tensor=inputs)
+    backbone = tf.keras.applications.ResNet50(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
     x = backbone.outputs[0]
     x = layers.Dense(1000)(x)
     outputs = layers.Activation('softmax', dtype='float32')(x)
