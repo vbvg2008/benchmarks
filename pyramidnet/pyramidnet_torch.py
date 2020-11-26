@@ -241,5 +241,5 @@ class PyramidNet(nn.Module):
 
 
 if __name__ == "__main__":
-    model = PyramidNet(dataset="cifar10", depth=272, alpha=200, num_classes=10, bottleneck=True)
+    model = PyramidNet(dataset="imagenet", depth=200, alpha=300, num_classes=1000, bottleneck=True)
     pdb.set_trace()
