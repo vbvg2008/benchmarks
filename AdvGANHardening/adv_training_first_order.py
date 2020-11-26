@@ -12,7 +12,7 @@ from fastestimator.dataset.data.cifar10 import load_data
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import Normalize
-from fastestimator.op.op import LambdaOp
+from fastestimator.op.tensorop import LambdaOp
 from fastestimator.op.tensorop.gradient import FGSM, GradientOp, Watch
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
@@ -152,8 +152,8 @@ def get_estimator(epochs=500, batch_size=256, save_dir=tempfile.mkdtemp(), epsil
         CrossEntropy(inputs=("y_pred_attack", "y"), outputs="ce_attack"),
         LambdaOp(fn=lambda x: -x, inputs="ce_attack", outputs="loss_attack"),
         UpdateOp(model=attack_model, loss_name="loss_attack"),
-        LambdaOp(fn=lambda a, b: a + b, inputs=("loss_original", "ce_attack"), outputs="loss_original", mode="train"),
-        UpdateOp(model=target_model, loss_name="loss_original"),
+        # LambdaOp(fn=lambda a, b: a + b, inputs=("loss_original", "ce_attack"), outputs="loss_original", mode="train"),
+        # UpdateOp(model=target_model, loss_name="loss_original"),
         # Adversarial attack (FGSM)
         FGSM(data="x", loss="loss_original", outputs="x_fgsm", epsilon=epsilon, mode='eval'),
         ModelOp(model=target_model, inputs="x_fgsm", outputs="y_pred_fgsm", mode='eval'),

@@ -12,8 +12,7 @@ from fastestimator.dataset.data.cifar10 import load_data
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import Normalize
-from fastestimator.op.op import LambdaOp
-from fastestimator.op.tensorop import Average
+from fastestimator.op.tensorop import Average, LambdaOp
 from fastestimator.op.tensorop.gradient import FGSM, GradientOp, Watch
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
