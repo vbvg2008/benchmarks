@@ -1,8 +1,17 @@
 import math
 import pdb
+import random
 
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
+from albumentations import BboxParams
+from fastestimator.dataset.data import mscoco
+from fastestimator.dataset.op_dataset import OpDataset
+from fastestimator.op.numpyop.multivariate import LongestMaxSize
+from fastestimator.op.numpyop.univariate import ReadImage
+from torch.utils.data import Dataset
 
 
 # Reuseable convolution
@@ -159,9 +168,63 @@ class YoloV5(nn.Module):
         return [out_17, out_20, out_23]
 
 
-if __name__ == "__main__":
-    model = YoloV5(input_shape=(256, 256, 3))
+class MosaicDataset(Dataset):
+    def __init__(self, mscoco_ds, image_size=640):
+        self.mscoco_ds = mscoco_ds
+        self.image_size = image_size
+        self.op_ds = OpDataset(
+            dataset=mscoco_ds,
+            ops=[
+                ReadImage(inputs="image", outputs="image"),
+                LongestMaxSize(max_size=image_size,
+                               image_in="image",
+                               image_out="image",
+                               bbox_in="bbox",
+                               bbox_out="bbox",
+                               bbox_params=BboxParams("coco", min_area=1.0))
+            ],
+            mode="train")
 
-    inputs = torch.rand(1, 3, 256, 256)
-    pred = model(inputs)
-    pdb.set_trace()
+    def __len__(self):
+        return len(self.mscoco_ds)
+
+    def __getitem__(self, idx):
+        indices = [idx] + [random.randint(0, len(self) - 1) for _ in range(3)]
+        samples = [self.op_ds[i] for i in indices]
+        images = [sample["image"] for sample in samples]
+        bboxes = [sample["bbox"] for sample in samples]
+        image_mosaic, bbox_mosaic = self._create_mosaic(images, bboxes)
+        return {"image": image_mosaic, "bbox": bbox_mosaic}
+
+    def _create_mosaic(self, images, bboxes):
+        yc = int(random.uniform(self.image_size // 2, 2 * self.image_size - self.image_size // 2))
+        xc = int(random.uniform(self.image_size // 2, 2 * self.image_size - self.image_size // 2))
+        image_mosaic = np.full((self.image_size * 2, self.image_size * 2, 3), fill_value=114, dtype=np.uint8)
+        for i, image in enumerate(images):
+            h, w = image.shape[0], image.shape[1]
+            if i == 0:  # top left
+                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
+                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
+            elif i == 1:  # top right
+                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, self.image_size * 2), yc
+                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
+            elif i == 2:  # bottom left
+                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(self.image_size * 2, yc + h)
+                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
+            elif i == 3:  # bottom right
+                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, self.image_size * 2), min(self.image_size * 2, yc + h)
+                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+            image_mosaic[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]
+        pdb.set_trace()
+        return image_mosaic, bboxes
+
+
+if __name__ == "__main__":
+    # model = YoloV5(input_shape=(256, 256, 3))
+
+    # inputs = torch.rand(1, 3, 256, 256)
+    # pred = model(inputs)
+    # pdb.set_trace()
+    coco_train, coco_eval = mscoco.load_data(root_dir="/data/data/public")
+    train_ds = MosaicDataset(coco_train, image_size=640)
+    train_ds[2]
