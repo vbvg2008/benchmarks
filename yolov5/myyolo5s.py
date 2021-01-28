@@ -1,16 +1,20 @@
+import json
 import math
 import pdb
 import random
 
 import cv2
+import fastestimator as fe
 import numpy as np
 import torch
 import torch.nn as nn
 from albumentations import BboxParams
 from fastestimator.dataset.data import mscoco
 from fastestimator.dataset.op_dataset import OpDataset
-from fastestimator.op.numpyop.multivariate import LongestMaxSize
-from fastestimator.op.numpyop.univariate import ReadImage
+from fastestimator.op.numpyop.meta import Sometimes
+from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, RandomCrop, \
+    RandomScale, Resize
+from fastestimator.op.numpyop.univariate import ChannelTranspose, ReadImage, ToArray
 from torch.utils.data import Dataset
 
 
@@ -168,7 +172,8 @@ class YoloV5(nn.Module):
         return [out_17, out_20, out_23]
 
 
-class MosaicDataset(Dataset):
+# This dataset selects 4 images and its bboxes
+class PreMosaicDataset(Dataset):
     def __init__(self, mscoco_ds, image_size=640):
         self.mscoco_ds = mscoco_ds
         self.image_size = image_size
@@ -193,38 +198,199 @@ class MosaicDataset(Dataset):
         samples = [self.op_ds[i] for i in indices]
         images = [sample["image"] for sample in samples]
         bboxes = [sample["bbox"] for sample in samples]
-        image_mosaic, bbox_mosaic = self._create_mosaic(images, bboxes)
-        return {"image": image_mosaic, "bbox": bbox_mosaic}
+        return {"image": images, "bbox": bboxes}
 
-    def _create_mosaic(self, images, bboxes):
-        yc = int(random.uniform(self.image_size // 2, 2 * self.image_size - self.image_size // 2))
-        xc = int(random.uniform(self.image_size // 2, 2 * self.image_size - self.image_size // 2))
-        image_mosaic = np.full((self.image_size * 2, self.image_size * 2, 3), fill_value=114, dtype=np.uint8)
-        for i, image in enumerate(images):
-            h, w = image.shape[0], image.shape[1]
-            if i == 0:  # top left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
-            elif i == 1:  # top right
-                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, self.image_size * 2), yc
-                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
-            elif i == 2:  # bottom left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(self.image_size * 2, yc + h)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif i == 3:  # bottom right
-                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, self.image_size * 2), min(self.image_size * 2, yc + h)
-                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
-            image_mosaic[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]
+
+class PadCorners(fe.op.numpyop.NumpyOp):
+    def forward(self, data, state):
+        images, bboxes = data
+        positions = ["topleft", "topright", "bottomleft", "bottomright"]
+        images_new, bboxes_new = [], []
+        for (pos, image, bbox) in zip(positions, images, bboxes):
+            image_new, bbox_new = self._pad_image_corner(image, bbox, pos)
+            images_new.append(image_new)
+            bboxes_new.append(bbox_new)
+        return images_new, bboxes_new
+
+    def _pad_image_corner(self, image, bbox, pos):
+        height, width = image.shape[0], image.shape[1]
+        if height > width and (pos == "topleft" or pos == "bottomleft"):
+            image, bbox = self._pad_left(image, bbox)
+        elif height < width and (pos == "topleft" or pos == "topright"):
+            image, bbox = self._pad_up(image, bbox)
+        elif height > width and (pos == "topright" or pos == "bottomright"):
+            image, bbox = self._pad_right(image, bbox)
+        elif height < width and (pos == "bottomleft" or pos == "bottomright"):
+            image, bbox = self._pad_down(image, bbox)
+        return image, bbox
+
+    def _pad_up(self, image, bbox, pad_value=114):
+        pad_length = abs(image.shape[0] - image.shape[1])
+        image = np.pad(image, [[pad_length, 0], [0, 0], [0, 0]], 'constant', constant_values=pad_value)
+        for i, box in enumerate(bbox):
+            new_box = list(box)
+            new_box[1] = new_box[1] + pad_length
+            bbox[i] = tuple(new_box)
+        return image, bbox
+
+    def _pad_down(self, image, bbox, pad_value=114):
+        pad_length = abs(image.shape[0] - image.shape[1])
+        image = np.pad(image, [[0, pad_length], [0, 0], [0, 0]], 'constant', constant_values=pad_value)
+        return image, bbox
+
+    def _pad_left(self, image, bbox, pad_value=114):
+        pad_length = abs(image.shape[0] - image.shape[1])
+        image = np.pad(image, [[0, 0], [pad_length, 0], [0, 0]], 'constant', constant_values=pad_value)
+        for i, box in enumerate(bbox):
+            new_box = list(box)
+            new_box[0] = new_box[0] + pad_length
+            bbox[i] = tuple(new_box)
+        return image, bbox
+
+    def _pad_right(self, image, bbox, pad_value=114):
+        pad_length = abs(image.shape[0] - image.shape[1])
+        image = np.pad(image, [[0, 0], [0, pad_length], [0, 0]], 'constant', constant_values=pad_value)
+        return image, bbox
+
+
+class CombineMosaic(fe.op.numpyop.NumpyOp):
+    def forward(self, data, state):
+        images, bboxes = data
+        images_new = self._combine_images(images)
+        bboxes_new = self._combine_boxes(bboxes, images)
+        return images_new, bboxes_new
+
+    def _combine_images(self, images):
+        height, width, channel = images[0].shape
+        images_new = np.full((2 * height, 2 * width, channel), fill_value=114, dtype=np.uint8)
+        images_new[:height, :width] = images[0]  # top left
+        images_new[:height, width:] = images[1]  # top right
+        images_new[height:, :width] = images[2]  # bottom left
+        images_new[height:, width:] = images[3]  # bottom right
+        return images_new
+
+    def _combine_boxes(self, bboxes, images):
+        height, width, _ = images[0].shape
+        bboxes_new = []
+        for img_idx, bbox in enumerate(bboxes):
+            for box in bbox:
+                new_box = list(box)
+                if img_idx == 1:  # top right
+                    new_box[0] = new_box[0] + width
+                elif img_idx == 2:  # bottom left
+                    new_box[1] = new_box[1] + height
+                elif img_idx == 3:  # bottom right
+                    new_box[0] = new_box[0] + width
+                    new_box[1] = new_box[1] + height
+                bboxes_new.append(tuple(new_box))
+        return bboxes_new
+
+
+class HSVAugment(fe.op.numpyop.NumpyOp):
+    def __init__(self, inputs, outputs, mode="train", hsv_h=0.015, hsv_s=0.7, hsv_v=0.4):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.hsv_h = hsv_h
+        self.hsv_s = hsv_s
+        self.hsv_v = hsv_v
+
+    def forward(self, data, state):
+        img = data
+        r = np.random.uniform(-1, 1, 3) * [self.hsv_h, self.hsv_s, self.hsv_v] + 1  # random gains
+        hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_RGB2HSV))
+        dtype = img.dtype  # uint8
+        x = np.arange(0, 256, dtype=np.int16)
+        lut_hue = ((x * r[0]) % 180).astype(dtype)
+        lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
+        lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
+        img_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))).astype(dtype)
+        img = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2RGB)
+        return img
+
+
+class DebugOp(fe.op.numpyop.NumpyOp):
+    def forward(self, data, stte):
+        image = data
         pdb.set_trace()
-        return image_mosaic, bboxes
+        return image
+
+
+def get_estimator(image_size=640, batch_size=4):
+    with open("class.json", 'r') as f:
+        class_map = json.load(f)
+    coco_train, coco_eval = mscoco.load_data(root_dir="/data/data/public")
+    train_ds = PreMosaicDataset(coco_train, image_size=image_size)
+    pipeline = fe.Pipeline(
+        train_data=train_ds,
+        eval_data=coco_eval,
+        batch_size=batch_size,
+        ops=[
+            ReadImage(inputs="image", outputs="image", mode="eval"),
+            LongestMaxSize(max_size=image_size,
+                           image_in="image",
+                           image_out="image",
+                           bbox_in="bbox",
+                           bbox_out="bbox",
+                           bbox_params=BboxParams("coco", min_area=1.0),
+                           mode="eval"),
+            PadCorners(inputs=("image", "bbox"), outputs=("image", "bbox"), mode="train"),
+            CombineMosaic(inputs=("image", "bbox"), outputs=("image", "bbox"), mode="train"),
+            PadIfNeeded(min_height=1920,
+                        min_width=1920,
+                        image_in="image",
+                        image_out="image",
+                        bbox_in="bbox",
+                        bbox_out="bbox",
+                        bbox_params=BboxParams("coco", min_area=1.0),
+                        mode="train",
+                        border_mode=cv2.BORDER_CONSTANT,
+                        value=(114, 114, 114)),
+            RandomCrop(height=1280,
+                       width=1280,
+                       image_in="image",
+                       image_out="image",
+                       bbox_in="bbox",
+                       bbox_out="bbox",
+                       bbox_params=BboxParams("coco", min_area=1.0),
+                       mode="train"),
+            RandomScale(scale_limit=0.5,
+                        image_in="image",
+                        image_out="image",
+                        bbox_in="bbox",
+                        bbox_out="bbox",
+                        bbox_params=BboxParams("coco", min_area=1.0),
+                        mode="train"),
+            Resize(height=image_size * 2,
+                   width=image_size * 2,
+                   image_in="image",
+                   image_out="image",
+                   bbox_in="bbox",
+                   bbox_out="bbox",
+                   bbox_params=BboxParams("coco", min_area=1.0),
+                   mode="train"),
+            Sometimes(
+                HorizontalFlip(image_in="image",
+                               image_out="image",
+                               bbox_in="bbox",
+                               bbox_out="bbox",
+                               bbox_params=BboxParams("coco", min_area=1.0),
+                               mode="train")),
+            HSVAugment(inputs="image", outputs="image", mode="train"),
+            ToArray(inputs="bbox", outputs="bbox")
+        ],
+        pad_value=0)
+    # data = pipeline.get_results()
+    pipeline.benchmark()
+
+    pdb.set_trace()
+    img = data["image"].numpy()
+    bbox = data["bbox"].numpy()
+    new_box = []
+    for box in bbox[0]:
+        new_box.append(list(box[:4]) + [class_map[str(int(box[4]))]])
+    new_box = np.array([new_box])
+    img_visualize = fe.util.ImgData(x=[img, new_box])
+    ig = img_visualize.paint_figure(save_path="object_results_5.png")
 
 
 if __name__ == "__main__":
-    # model = YoloV5(input_shape=(256, 256, 3))
-
-    # inputs = torch.rand(1, 3, 256, 256)
-    # pred = model(inputs)
-    # pdb.set_trace()
-    coco_train, coco_eval = mscoco.load_data(root_dir="/data/data/public")
-    train_ds = MosaicDataset(coco_train, image_size=640)
-    train_ds[2]
+    get_estimator()
