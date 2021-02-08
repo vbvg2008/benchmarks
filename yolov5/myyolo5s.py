@@ -2,20 +2,27 @@ import json
 import math
 import pdb
 import random
+import tempfile
 
 import cv2
 import fastestimator as fe
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision
 from albumentations import BboxParams
 from fastestimator.dataset.data import mscoco
 from fastestimator.dataset.op_dataset import OpDataset
+from fastestimator.op.numpyop import NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, RandomCrop, \
     RandomScale, Resize
 from fastestimator.op.numpyop.univariate import ChannelTranspose, Normalize, ReadImage
+from fastestimator.op.tensorop import TensorOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver
+from fastestimator.trace.metric import MeanAveragePrecision
 from torch.utils.data import Dataset
 
 
@@ -200,7 +207,7 @@ class PreMosaicDataset(Dataset):
         return {"image": images, "bbox": bboxes}
 
 
-class PadCorners(fe.op.numpyop.NumpyOp):
+class PadCorners(NumpyOp):
     def forward(self, data, state):
         images, bboxes = data
         positions = ["topleft", "topright", "bottomleft", "bottomright"]
@@ -252,7 +259,7 @@ class PadCorners(fe.op.numpyop.NumpyOp):
         return image, bbox
 
 
-class CombineMosaic(fe.op.numpyop.NumpyOp):
+class CombineMosaic(NumpyOp):
     def forward(self, data, state):
         images, bboxes = data
         images_new = self._combine_images(images)
@@ -285,7 +292,7 @@ class CombineMosaic(fe.op.numpyop.NumpyOp):
         return bboxes_new
 
 
-class HSVAugment(fe.op.numpyop.NumpyOp):
+class HSVAugment(NumpyOp):
     def __init__(self, inputs, outputs, mode="train", hsv_h=0.015, hsv_s=0.7, hsv_v=0.4):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.hsv_h = hsv_h
@@ -336,7 +343,7 @@ def get_yolo_anchor_box(width,
     return np.float32(anchorbox), np.int32(num_pixel) * 3
 
 
-class AnchorBox(fe.op.numpyop.NumpyOp):
+class AnchorBox(NumpyOp):
     def __init__(self, width, height, inputs, outputs, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.anchorbox, _ = get_yolo_anchor_box(width, height)  # anchorbox is #num_anchor x 4
@@ -396,7 +403,7 @@ class AnchorBox(fe.op.numpyop.NumpyOp):
         return iou
 
 
-class ShiftLabel(fe.op.numpyop.NumpyOp):
+class ShiftLabel(NumpyOp):
     def forward(self, data, state):
         # the label of COCO dataset starts from 1, shifting the start to 0
         bbox = np.array(data, dtype=np.float32)
@@ -404,12 +411,12 @@ class ShiftLabel(fe.op.numpyop.NumpyOp):
         return bbox
 
 
-class Rescale(fe.op.numpyop.NumpyOp):
+class Rescale(NumpyOp):
     def forward(self, data, state):
         return np.float32(data / 255)
 
 
-class YoloLoss(fe.op.tensorop.TensorOp):
+class YoloLoss(TensorOp):
     def forward(self, data, state):
         anchorbox, obj_pred = data
         loc_pred, cls_pred = obj_pred[..., :4], obj_pred[..., 4:]
@@ -467,10 +474,96 @@ class YoloLoss(fe.op.tensorop.TensorOp):
         return loc_loss
 
 
-def get_estimator(batch_size=4):
-    with open("class.json", 'r') as f:
-        class_map = json.load(f)
-    coco_train, coco_eval = mscoco.load_data(root_dir="/data/data/public")
+class PredictBox(TensorOp):
+    """Convert network output to bounding boxes."""
+    def __init__(self,
+                 inputs=None,
+                 outputs=None,
+                 mode=None,
+                 input_shape=(512, 512, 3),
+                 select_top_k=1000,
+                 nms_max_outputs=100,
+                 score_threshold=0.05):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.input_shape = input_shape
+        self.select_top_k = select_top_k
+        self.nms_max_outputs = nms_max_outputs
+        self.score_threshold = score_threshold
+        self.all_anchors, self.num_anchors_per_level = get_yolo_anchor_box(width=input_shape[1], height=input_shape[0])
+        self.all_anchors = torch.Tensor(self.all_anchors)
+        if torch.cuda.is_available():
+            self.all_anchors = self.all_anchors.to("cuda")
+
+    def forward(self, data, state):
+        loc_pred, cls_pred = data[..., :4], data[..., 4:]
+        batch_size = cls_pred.size(0)
+        scores_pred, labels_pred = torch.max(cls_pred, dim=-1)
+        # loc_pred -> loc_abs
+        x1_abs = loc_pred[..., 0] * self.all_anchors[..., 2] + self.all_anchors[..., 0]
+        y1_abs = loc_pred[..., 1] * self.all_anchors[..., 3] + self.all_anchors[..., 1]
+        w_abs = torch.exp(loc_pred[..., 2]) * self.all_anchors[..., 2]
+        h_abs = torch.exp(loc_pred[..., 3]) * self.all_anchors[..., 3]
+        x2_abs, y2_abs = x1_abs + w_abs, y1_abs + h_abs
+        # iterate over images
+        final_results = []
+        for idx in range(batch_size):
+            scores_pred_single = scores_pred[idx]
+            boxes_pred_single = torch.stack([x1_abs[idx], y1_abs[idx], x2_abs[idx], y2_abs[idx]], dim=-1)
+            # iterate over each pyramid to select top 1000 anchor boxes
+            start = 0
+            top_idx = []
+            for num_anchors_fpn_level in self.num_anchors_per_level:
+                fpn_scores = scores_pred_single[start:start + num_anchors_fpn_level]
+                _, selected_index = torch.topk(fpn_scores, min(self.select_top_k, int(num_anchors_fpn_level)))
+                top_idx.append(selected_index + start)
+                start += num_anchors_fpn_level
+            top_idx = torch.cat([x.long() for x in top_idx])
+            # perform nms
+            nms_keep = torchvision.ops.nms(boxes_pred_single[top_idx], scores_pred_single[top_idx], iou_threshold=0.5)
+            nms_keep = nms_keep[:self.nms_max_outputs]  # select the top nms outputs
+            top_idx = top_idx[nms_keep]  # narrow the keep index
+            results_single = [
+                x1_abs[idx][top_idx],
+                y1_abs[idx][top_idx],
+                w_abs[idx][top_idx],
+                h_abs[idx][top_idx],
+                labels_pred[idx][top_idx].float(),
+                scores_pred[idx][top_idx],
+                torch.ones_like(x1_abs[idx][top_idx])
+            ]
+            # clip bounding boxes to image size
+            results_single[0] = torch.clamp(results_single[0], min=0, max=self.input_shape[1])
+            results_single[1] = torch.clamp(results_single[1], min=0, max=self.input_shape[0])
+            results_single[2] = torch.clamp(results_single[2], min=0)
+            results_single[2] = torch.where(results_single[2] > self.input_shape[1] - results_single[0],
+                                            self.input_shape[1] - results_single[0],
+                                            results_single[2])
+            results_single[3] = torch.clamp(results_single[3], min=0)
+            results_single[3] = torch.where(results_single[3] > self.input_shape[0] - results_single[1],
+                                            self.input_shape[0] - results_single[1],
+                                            results_single[3])
+            # mark the select as 0 for any anchorbox with score lower than threshold
+            results_single[-1] = torch.where(results_single[-2] > self.score_threshold,
+                                             results_single[-1],
+                                             torch.zeros_like(results_single[-1]))
+            final_results.append(torch.stack(results_single, dim=-1))
+        return torch.stack(final_results)
+
+
+def lr_fn(step):
+    if step < 2000:
+        lr = (0.01 - 0.0002) / 2000 * step + 0.0002
+    elif step < 120000:
+        lr = 0.01
+    elif step < 160000:
+        lr = 0.001
+    else:
+        lr = 0.0001
+    return lr / 2  # original batch_size 16, for 512 we have batch_size 8
+
+
+def get_estimator(data_dir, model_dir=tempfile.mkdtemp(), batch_size=8, epochs=13):
+    coco_train, coco_eval = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(coco_train, image_size=640)
     pipeline = fe.Pipeline(
         train_data=train_ds,
@@ -530,31 +623,22 @@ def get_estimator(batch_size=4):
             ChannelTranspose(inputs="image", outputs="image")
         ],
         pad_value=0)
-
-    model = fe.build(model_fn=lambda: YoloV5(w=1280, h=1280, c=3, num_class=90), optimizer_fn="adam")
+    model = fe.build(model_fn=lambda: YoloV5(w=1280, h=1280, c=3, num_class=90),
+                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=1e-4, momentum=0.9, weight_decay=0.0001))
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="image", outputs="obj_pred"),
         YoloLoss(inputs=("anchorbox", "obj_pred"), outputs=("total_loss", "focal_loss", "l1_loss")),
-        UpdateOp(model=model, loss_name="total_loss")
+        UpdateOp(model=model, loss_name="total_loss"),
+        PredictBox(input_shape=(1280, 1280, 3), inputs="obj_pred", outputs="pred", mode="eval")
     ])
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=1, monitor_names=["l1_loss", "focal_loss"])
+    traces = [
+        MeanAveragePrecision(num_classes=90, true_key='bbox', pred_key='pred', mode="eval"),
+        BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
+        LRScheduler(model=model, lr_fn=lr_fn)
+    ]
+    estimator = fe.Estimator(pipeline=pipeline,
+                             network=network,
+                             epochs=epochs,
+                             traces=traces,
+                             monitor_names=["l1_loss", "focal_loss"])
     return estimator
-
-
-if __name__ == "__main__":
-    # pdb.set_trace()
-    # img = data["image"].numpy()
-    # bbox = data["bbox"].numpy()
-    # new_box = []
-    # for box in bbox[0]:
-    #     new_box.append(list(box[:4]) + [class_map[str(int(box[4]))]])
-    # new_box = np.array([new_box])
-    # img_visualize = fe.util.ImgData(x=[img, new_box])
-    # ig = img_visualize.paint_figure(save_path="object_results_5.png")
-    est = get_estimator()
-    est.fit()
-    # model = YoloV5(w=1280, h=1280, c=3, num_class=80)
-    # inputs = torch.rand(1, 3, 1280, 1280)
-    # pred = model(inputs)
-    # pdb.set_trace()
-    # _get_yolo_anchor_box(width=640, height=640)
