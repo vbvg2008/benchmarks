@@ -144,6 +144,7 @@ class YoloV5(nn.Module):
     def forward(self, x):
         x = self.focus(x)
         x = self.conv1(x)
+        pdb.set_trace()
         x = self.c3_1(x)
         x = self.conv2(x)
         x_4 = self.c3_2(x)
@@ -642,3 +643,8 @@ def get_estimator(data_dir, model_dir=tempfile.mkdtemp(), batch_size=8, epochs=1
                              traces=traces,
                              monitor_names=["l1_loss", "focal_loss"])
     return estimator
+
+if __name__ == "__main__":
+    model = YoloV5(w=1280, h=1280, c=3, num_class=80)
+    inputs = torch.rand(1, 3, 1280, 1280)
+    pred = model(inputs)
