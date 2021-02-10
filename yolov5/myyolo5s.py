@@ -644,7 +644,23 @@ def get_estimator(data_dir, model_dir=tempfile.mkdtemp(), batch_size=8, epochs=1
                              monitor_names=["l1_loss", "focal_loss"])
     return estimator
 
+
+def get_param(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def list_conv_params(model_modules):
+    for m in model_modules:
+        if isinstance(m, nn.Conv2d):
+            # print(m)
+            print(get_param(m))
+
+
 if __name__ == "__main__":
-    model = YoloV5(w=1280, h=1280, c=3, num_class=80)
+    model = YoloV5(w=1280, h=1280, c=3, num_class=90)
+    modules = model.modules()
+    model_modules = [module for module in modules]
+    list_conv_params(model_modules)
+    pdb.set_trace()
     inputs = torch.rand(1, 3, 1280, 1280)
     pred = model(inputs)
