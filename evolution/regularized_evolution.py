@@ -33,7 +33,7 @@ def get_estimator(gene, batch_size=32, epochs=50):
         pipeline = fe.Pipeline(train_data=train_data,
                                eval_data=eval_data,
                                batch_size=batch_size,
-                               ops=[ExpandDims(inputs="x", outputs="x"), Minmax(inputs="x", outputs="x")])
+                               ops=Minmax(inputs="x", outputs="x"))
         model = fe.build(model_fn=lambda: get_model(gene, input_shape=(32, 32, 3)), optimizer_fn="adam")
         network = fe.Network(ops=[
             ModelOp(model=model, inputs="x", outputs="y_pred"),
