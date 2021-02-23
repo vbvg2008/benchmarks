@@ -7,7 +7,7 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.metric import Accuracy
 
 
-def get_estimator(batch_size=32, epochs=50):
+def get_estimator(batch_size=128, epochs=30):
     train_data, eval_data = cifar10.load_data()
     pipeline = fe.Pipeline(train_data=train_data,
                            eval_data=eval_data,
