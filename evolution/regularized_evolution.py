@@ -4,7 +4,7 @@ import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from fastestimator.dataset.data import cifar10
-from fastestimator.op.numpyop.univariate import ExpandDims, Minmax
+from fastestimator.op.numpyop.univariate import Minmax
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.metric import Accuracy
@@ -48,7 +48,7 @@ def get_estimator(gene, batch_size=32, epochs=50):
     return estimator
 
 
-def get_random_gene_list(choices=[-1, 0, 1, 2], max_size=10):
+def get_random_gene_list(choices=[-1, 0, 1, 2], max_size=6):
     return [random.choice(choices) for _ in range(max_size)]
 
 
@@ -69,12 +69,12 @@ def evaluate_gene(gene, epochs=30, batch_size=128):
     return best_acc
 
 
-# def evaluate_gene2(gene):
-#     # for debugging purpose
-#     return sum(gene)
+def evaluate_gene2(gene):
+    # for debugging purpose
+    return sum(gene)
 
 
-def regularized_evolution(num_generations=550, population_sizes=150, sample_size=25):
+def regularized_evolution(num_generations=320, population_sizes=80, sample_size=25):
     history = {}
     results_history = []
     populations = [get_random_gene_list() for _ in range(population_sizes)]
