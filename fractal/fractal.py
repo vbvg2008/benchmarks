@@ -1,4 +1,5 @@
 import pdb
+import tempfile
 
 import fastestimator as fe
 import tensorflow as tf
@@ -8,6 +9,7 @@ from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, R
 from fastestimator.op.numpyop.univariate import CoarseDropout, Normalize
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.metric import Accuracy
 from tensorflow.keras import layers
 
@@ -15,21 +17,37 @@ from tensorflow.keras import layers
 def conv_block(x, c, k=3):
     x = layers.Conv2D(filters=c, kernel_size=k, padding='same', use_bias=False)(x)
     x = layers.BatchNormalization(momentum=0.9)(x)
-    x = layers.LeakyReLU(alpha=0.1)(x)
+    x = layers.ReLU()(x)
     return x
 
 
-def bottleneck_block(x, c):
-    x = layers.Conv2D(filters=c, kernel_size=1, padding='same', use_bias=False)(x)
+def bottleneck_block(inputs, c):
+    x = layers.Conv2D(filters=c, kernel_size=1, padding='same', use_bias=False)(inputs)
     x = layers.BatchNormalization(momentum=0.9)(x)
     x = layers.ReLU()(x)
     x = layers.Conv2D(filters=c, kernel_size=3, padding='same', use_bias=False)(x)
     x = layers.BatchNormalization(momentum=0.9)(x)
     x = layers.ReLU()(x)
     x = layers.Conv2D(filters=c, kernel_size=1, padding='same', use_bias=False)(x)
-    x = layers.BatchNormalization(momentum=0.9)(x)``
+    x = layers.BatchNormalization(momentum=0.9)(x)
     x = layers.ReLU()(x)
-    return x
+    if x.shape[-1] == inputs.shape[-1]:
+        outputs = x + inputs
+    else:
+        outputs = x
+    return outputs
+
+
+def res2net_block(inputs, c, s=4):
+    cg = c // s
+    x = conv_block(inputs, c, k=1)
+    x1, x2, x3, x4 = x[..., :cg], x[..., cg:2 * cg], x[..., 2 * cg:3 * cg], x[..., 3 * cg:]
+    x2 = conv_block(x2, cg, k=3)
+    x3 = x3 + x2
+    x3 = conv_block(x3, cg, k=3)
+    x4 = x4 + x3
+    x4 = conv_block(x4, cg, k=3)
+    
 
 
 def fractal(x, level, c):
@@ -53,7 +71,8 @@ def mymodel(num_blocks=2, block_level=3, input_shape=(28, 28, 1), init_filter=32
     return model
 
 
-def get_estimator(epochs=30, batch_size=128):
+def get_estimator(num_blocks, block_level, epochs=100, batch_size=128, save_dir=tempfile.mkdtemp()):
+    print("number of blocks: {}, block level: {}".format(num_blocks, block_level))
     # step 1
     train_data, eval_data = cifar10.load_data()
     pipeline = fe.Pipeline(
@@ -69,7 +88,7 @@ def get_estimator(epochs=30, batch_size=128):
         ])
 
     # step 2
-    model = fe.build(model_fn=lambda: mymodel(input_shape=(32, 32, 3), num_blocks=4, block_level=4),
+    model = fe.build(model_fn=lambda: mymodel(input_shape=(32, 32, 3), num_blocks=num_blocks, block_level=block_level),
                      optimizer_fn="adam")
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
@@ -77,13 +96,9 @@ def get_estimator(epochs=30, batch_size=128):
         UpdateOp(model=model, loss_name="ce")
     ])
     # step 3
-    traces = [Accuracy(true_key="y", pred_key="y_pred")]
+    traces = [
+        Accuracy(true_key="y", pred_key="y_pred"),
+        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max")
+    ]
     estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, traces=traces)
     return estimator
-
-
-if __name__ == "__main__":
-    mod = mymodel(input_shape=(32, 32, 3), num_blocks=4, block_level=4)
-    pdb.set_trace()
-    # est = get_estimator(epochs=2)
-    # est.fit()
