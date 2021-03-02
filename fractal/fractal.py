@@ -22,15 +22,9 @@ def conv_block(x, c, k=3):
 
 
 def bottleneck_block(inputs, c):
-    x = layers.Conv2D(filters=c, kernel_size=1, padding='same', use_bias=False)(inputs)
-    x = layers.BatchNormalization(momentum=0.9)(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(filters=c, kernel_size=3, padding='same', use_bias=False)(x)
-    x = layers.BatchNormalization(momentum=0.9)(x)
-    x = layers.ReLU()(x)
-    x = layers.Conv2D(filters=c, kernel_size=1, padding='same', use_bias=False)(x)
-    x = layers.BatchNormalization(momentum=0.9)(x)
-    x = layers.ReLU()(x)
+    x = conv_block(inputs, c, k=1)
+    x = conv_block(x, c, k=3)
+    x = conv_block(x, c, k=1)
     if x.shape[-1] == inputs.shape[-1]:
         outputs = x + inputs
     else:
@@ -47,7 +41,13 @@ def res2net_block(inputs, c, s=4):
     x3 = conv_block(x3, cg, k=3)
     x4 = x4 + x3
     x4 = conv_block(x4, cg, k=3)
-    
+    x = tf.concat([x1, x2, x3, x4], axis=-1)
+    x = conv_block(x, c, k=1)
+    if x.shape[-1] == inputs.shape[-1]:
+        outputs = x + inputs
+    else:
+        outputs = x
+    return outputs
 
 
 def fractal(x, level, c):
@@ -61,9 +61,12 @@ def mymodel(num_blocks=2, block_level=3, input_shape=(28, 28, 1), init_filter=32
     num_filter = init_filter
     inputs = layers.Input(shape=input_shape)
     x = inputs
-    for _ in range(num_blocks):
+    for i in range(num_blocks):
         x = fractal(x, block_level, num_filter)
-        x = layers.MaxPool2D()(x)
+        if i == num_blocks - 1:
+            x = layers.GlobalAveragePooling2D()(x)
+        else:
+            x = layers.MaxPool2D()(x)
         num_filter = num_filter * 2
     x = layers.Flatten()(x)
     x = layers.Dense(num_classes, activation='softmax')(x)
@@ -71,7 +74,7 @@ def mymodel(num_blocks=2, block_level=3, input_shape=(28, 28, 1), init_filter=32
     return model
 
 
-def get_estimator(num_blocks, block_level, epochs=100, batch_size=128, save_dir=tempfile.mkdtemp()):
+def get_estimator(num_blocks, block_level, epochs=200, batch_size=128, save_dir=tempfile.mkdtemp()):
     print("number of blocks: {}, block level: {}".format(num_blocks, block_level))
     # step 1
     train_data, eval_data = cifar10.load_data()
@@ -89,7 +92,7 @@ def get_estimator(num_blocks, block_level, epochs=100, batch_size=128, save_dir=
 
     # step 2
     model = fe.build(model_fn=lambda: mymodel(input_shape=(32, 32, 3), num_blocks=num_blocks, block_level=block_level),
-                     optimizer_fn="adam")
+                     optimizer_fn=lambda: tf.optimizers.Adam(1e-4))
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
