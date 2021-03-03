@@ -1,4 +1,3 @@
-import pdb
 import tempfile
 
 import fastestimator as fe
@@ -11,7 +10,8 @@ from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, R
 from fastestimator.op.numpyop.univariate import ChannelTranspose, CoarseDropout, Normalize
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
-from fastestimator.trace.io import BestModelSaver
+from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import Accuracy
 
 
@@ -116,42 +116,55 @@ class FractalNet(nn.Module):
         return x
 
 
-def get_estimator(num_blocks, block_level, epochs=200, batch_size=128, save_dir=tempfile.mkdtemp()):
-    print("number of blocks: {}, block level: {}".format(num_blocks, block_level))
-    # step 1
-    train_data, eval_data = cifar10.load_data()
+def lr_schedule(epoch):
+    if epoch < 60:
+        lr = 0.01
+    elif epoch < 120:
+        lr = 0.01 * 0.2**1
+    elif epoch < 160:
+        lr = 0.01 * 0.2**2
+    else:
+        lr = 0.01 * 0.2**3
+    return lr
+
+
+def get_estimator(num_blocks,
+                  block_level,
+                  epochs=200,
+                  batch_size=128,
+                  save_dir=tempfile.mkdtemp(),
+                  restore_dir=tempfile.mkdtemp()):
+    # step 1: prepare dataset
+    train_data, test_data = cifar10.load_data()
     pipeline = fe.Pipeline(
         train_data=train_data,
-        eval_data=eval_data,
+        eval_data=test_data,
         batch_size=batch_size,
         ops=[
-            Normalize(inputs="x", outputs="x", mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616)),
             PadIfNeeded(min_height=40, min_width=40, image_in="x", image_out="x", mode="train"),
-            RandomCrop(32, 32, image_in="x", image_out="x", mode="train"),
             Sometimes(HorizontalFlip(image_in="x", image_out="x", mode="train")),
+            RandomCrop(32, 32, image_in="x", image_out="x", mode="train"),
             CoarseDropout(inputs="x", outputs="x", mode="train", max_holes=1),
+            Normalize(inputs="x", outputs="x", mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616)),
             ChannelTranspose(inputs="x", outputs="x")
         ])
 
-    # step 2
-    model = fe.build(model_fn=lambda: FractalNet(num_blocks=num_blocks, block_level=block_level, input_channel=3),
-                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.01, momentum=0.9, weight_decay=0.0001))
+    # step 2: prepare network
+    model = fe.build(model_fn=lambda: FractalNet(num_blocks=num_blocks, block_level=block_level),
+                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.01, momentum=0.9, weight_decay=0.0005))
+
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
         CrossEntropy(inputs=("y_pred", "y"), outputs="ce", from_logits=True),
         UpdateOp(model=model, loss_name="ce")
     ])
-    # step 3
+
+    # step 3 prepare estimator
     traces = [
         Accuracy(true_key="y", pred_key="y_pred"),
-        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max")
+        LRScheduler(model=model, lr_fn=lr_schedule),
+        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max"),
+        RestoreWizard(directory=restore_dir)
     ]
     estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, traces=traces)
     return estimator
-
-
-if __name__ == "__main__":
-    model = FractalNet(num_blocks=3, block_level=3)
-    inputs = torch.rand(1, 3, 32, 32)
-    pred = model(inputs)
-    pdb.set_trace()
