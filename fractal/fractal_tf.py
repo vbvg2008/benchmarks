@@ -69,7 +69,7 @@ def mymodel(num_blocks=2, block_level=3, input_shape=(28, 28, 1), init_filter=32
             x = layers.MaxPool2D()(x)
         num_filter = num_filter * 2
     x = layers.Flatten()(x)
-    x = layers.Dense(num_classes, activation='softmax')(x)
+    x = layers.Dense(num_classes)(x)
     model = tf.keras.Model(inputs=inputs, outputs=x)
     return model
 
@@ -95,7 +95,7 @@ def get_estimator(num_blocks, block_level, epochs=200, batch_size=128, save_dir=
                      optimizer_fn=lambda: tf.optimizers.Adam(1e-4))
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="x", outputs="y_pred"),
-        CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
+        CrossEntropy(inputs=("y_pred", "y"), outputs="ce", from_logits=True),
         UpdateOp(model=model, loss_name="ce")
     ])
     # step 3
