@@ -19,11 +19,12 @@ Note that we use the ciFAIR10 dataset instead (https://cvjena.github.io/cifair/)
 """
 import tempfile
 
-import fastestimator as fe
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from fastestimator.dataset.data.cifair10 import load_data
+
+import fastestimator as fe
+from fastestimator.dataset.data.cifar10 import load_data
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import ChannelTranspose, CoarseDropout, Normalize, Onehot
@@ -115,7 +116,7 @@ def get_estimator(epochs=24, batch_size=512, max_train_steps_per_epoch=None, sav
     train_data, test_data = load_data()
     pipeline = fe.Pipeline(
         train_data=train_data,
-        test_data=test_data,
+        eval_data=test_data,
         batch_size=batch_size,
         ops=[
             Normalize(inputs="x", outputs="x", mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616)),
@@ -146,9 +147,3 @@ def get_estimator(epochs=24, batch_size=512, max_train_steps_per_epoch=None, sav
                              traces=traces,
                              max_train_steps_per_epoch=max_train_steps_per_epoch)
     return estimator
-
-
-if __name__ == "__main__":
-    est = get_estimator()
-    est.fit()
-    est.test()

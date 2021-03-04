@@ -1,10 +1,13 @@
+import pdb
 import tempfile
 
-import fastestimator as fe
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from fastestimator.dataset.data.cifair10 import load_data
+
+import fastestimator as fe
+import sls
+from fastestimator.dataset.data.cifar10 import load_data
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import ChannelTranspose, CoarseDropout, Normalize, Onehot
@@ -13,8 +16,6 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.metric import Accuracy
-
-import sls
 
 
 class FastCifar(nn.Module):
@@ -105,6 +106,16 @@ class SGDLinesSearch(fe.op.tensorop.TensorOp):
         return loss
 
 
+class PrintLR(fe.trace.Trace):
+    def __init__(self, opt):
+        super().__init__(mode="train")
+        self.opt = opt
+
+    def on_batch_end(self, data):
+        if self.system.global_step % self.system.log_steps == 0 or self.system.global_step == 1:
+            data.write_with_log("model_lr", float(self.opt.state['step_size']))
+
+
 def get_estimator(epochs=24, batch_size=512, max_train_steps_per_epoch=None, save_dir=tempfile.mkdtemp()):
     # step 1: prepare dataset
     train_data, test_data = load_data()
@@ -138,11 +149,13 @@ def get_estimator(epochs=24, batch_size=512, max_train_steps_per_epoch=None, sav
     # step 3 prepare estimator
     traces = [
         Accuracy(true_key="y", pred_key="y_pred"),
-        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max")
+        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max"),
+        PrintLR(opt=opt)
     ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,
                              traces=traces,
-                             max_train_steps_per_epoch=max_train_steps_per_epoch)
+                             max_train_steps_per_epoch=max_train_steps_per_epoch,
+                             log_steps=50)
     return estimator
