@@ -1,7 +1,9 @@
 import pdb
 
-import fastestimator as fe
 import tensorflow as tf
+from tensorflow.python.keras import layers
+
+import fastestimator as fe
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import CoarseDropout, Normalize
@@ -10,7 +12,6 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.schedule import cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.metric import Accuracy
-from tensorflow.python.keras import layers
 
 
 def residual(x, num_channel):
@@ -60,41 +61,16 @@ def linear_increase(step, min_lr=0.0, max_lr=3.0, num_steps=5000):
     return lr
 
 
-def get_estimator(init_lr, epochs=30, batch_size=128):
+def exp_increase(step, min_lr=-3.0, max_lr=1.0, num_steps=5000):
+    lr_order = step / num_steps * (max_lr - min_lr) + min_lr
+    lr = 10**lr_order
+    return lr
+
+
+def super_convergence(epochs=50, batch_size=128):
     # step 1
-    train_data, eval_data = fe.dataset.data.cifar10.load_data()
-
-    pipeline = fe.Pipeline(
-        train_data=train_data,
-        eval_data=eval_data,
-        batch_size=batch_size,
-        ops=[
-            Normalize(inputs="x", outputs="x", mean=(0.4914, 0.4822, 0.4465), std=(0.2471, 0.2435, 0.2616)),
-            PadIfNeeded(min_height=40, min_width=40, image_in="x", image_out="x", mode="train"),
-            RandomCrop(32, 32, image_in="x", image_out="x", mode="train"),
-            Sometimes(HorizontalFlip(image_in="x", image_out="x", mode="train")),
-            CoarseDropout(inputs="x", outputs="x", mode="train", max_holes=1)
-        ])
-    # step 2
-    model = fe.build(model_fn=my_model, optimizer_fn=lambda: tf.optimizers.Adam(init_lr))
-    network = fe.Network(ops=[
-        ModelOp(model=model, inputs="x", outputs="y_pred"),
-        CrossEntropy(inputs=("y_pred", "y"), outputs="ce"),
-        UpdateOp(model=model, loss_name="ce")
-    ])
-    # step 3
-    traces = [
-        Accuracy(true_key="y", pred_key="y_pred"),
-        LRScheduler(model=model, lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epoch, init_lr=init_lr))
-    ]
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, traces=traces)
-    return estimator
-
-
-def super_convergence(epochs=500, batch_size=128):
-    # step 1
-    train_data, eval_data = fe.dataset.data.cifar10.load_data()
-
+    train_data, test_data = fe.dataset.data.cifar10.load_data()
+    eval_data = train_data.split(0.2)
     pipeline = fe.Pipeline(
         train_data=train_data,
         eval_data=eval_data,
@@ -116,7 +92,7 @@ def super_convergence(epochs=500, batch_size=128):
     # step 3
     traces = [
         Accuracy(true_key="y", pred_key="y_pred"),
-        LRScheduler(model=model, lr_fn=lambda step: linear_increase(step, min_lr=0.0, max_lr=3.0, num_steps=5000))
+        LRScheduler(model=model, lr_fn=lambda step: exp_increase(step, num_steps=500))
     ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
@@ -124,7 +100,7 @@ def super_convergence(epochs=500, batch_size=128):
                              traces=traces,
                              max_train_steps_per_epoch=10,
                              log_steps=10)
-    history = estimator.fit(summary="exp")
+    estimator.fit()
 
 
 if __name__ == "__main__":

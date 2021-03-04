@@ -1,8 +1,10 @@
 import cv2
-import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from albumentations import BboxParams
+from tensorflow.python.keras import layers, models, regularizers
+
+import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -13,7 +15,6 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.schedule import cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.metric import MeanAveragePrecision
-from tensorflow.python.keras import layers, models, regularizers
 
 
 def _get_fpn_anchor_box(width: int, height: int):
@@ -411,18 +412,12 @@ class PredictBox(TensorOp):
         return tf.stack(final_results)
 
 
-def linear_increase(step, min_lr=0.0, max_lr=3.0, num_steps=5000):
+def linear_increase(step, min_lr=0.0, max_lr=0.1, num_steps=500):
     lr = step / num_steps * (max_lr - min_lr) + min_lr
     return lr
 
 
-def get_estimator(init_lr,
-                  data_dir,
-                  max_train_steps_per_epoch=1500,
-                  batch_size=32,
-                  epochs=30,
-                  image_size=256,
-                  num_classes=90):
+def get_estimator(data_dir, max_train_steps_per_epoch=10, batch_size=32, epochs=50, image_size=256, num_classes=90):
     # pipeline
     train_ds, eval_ds = mscoco.load_data(root_dir=data_dir)
     pipeline = fe.Pipeline(
@@ -461,24 +456,22 @@ def get_estimator(init_lr,
         pad_value=0)
     # network
     model = fe.build(model_fn=lambda: RetinaNet(input_shape=(image_size, image_size, 3), num_classes=num_classes),
-                     optimizer_fn=lambda: tf.optimizers.SGD(init_lr, momentum=0.9))
+                     optimizer_fn=lambda: tf.optimizers.SGD(0.01, momentum=0.9))
     network = fe.Network(ops=[
         ModelOp(model=model, inputs="image", outputs=["cls_pred", "loc_pred"]),
         RetinaLoss(inputs=["anchorbox", "cls_pred", "loc_pred"], outputs=["total_loss", "focal_loss", "l1_loss"]),
-        UpdateOp(model=model, loss_name="total_loss"),
-        PredictBox(
-            input_shape=(image_size, image_size, 3), inputs=["cls_pred", "loc_pred"], outputs="pred", mode="eval")
+        UpdateOp(model=model, loss_name="total_loss")
     ])
     # estimator
-    traces = [
-        MeanAveragePrecision(num_classes=num_classes, true_key='bbox', pred_key='pred', mode="eval"),
-        LRScheduler(
-            model=model,
-            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs / 3, cycle_multiplier=2, init_lr=init_lr))
-    ]
+    traces = [LRScheduler(model=model, lr_fn=lambda step: linear_increase(step, num_steps=500))]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,
                              traces=traces,
-                             max_train_steps_per_epoch=max_train_steps_per_epoch)
-    return estimator
+                             max_train_steps_per_epoch=max_train_steps_per_epoch,
+                             log_steps=10)
+    estimator.fit()
+
+
+if __name__ == "__main__":
+    get_estimator(data_dir="/data/data")

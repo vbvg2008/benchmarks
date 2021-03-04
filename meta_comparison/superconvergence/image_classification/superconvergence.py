@@ -1,5 +1,7 @@
-import fastestimator as fe
 import tensorflow as tf
+from tensorflow.python.keras import layers
+
+import fastestimator as fe
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, RandomCrop
 from fastestimator.op.numpyop.univariate import CoarseDropout, Normalize
@@ -7,7 +9,6 @@ from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.metric import Accuracy
-from tensorflow.python.keras import layers
 
 
 def residual(x, num_channel):
@@ -52,13 +53,13 @@ def my_model():
     return model
 
 
-def super_schedule(step):
+def super_schedule(step, lr_max=0.05, lr_min=0.0125):
     if step < 391 * 13:
-        lr = (0.15 - 0.01) / 391 / 13 * step + 0.01
+        lr = (lr_max - lr_min) / 391 / 13 * step + lr_min
     elif step < 391 * 26:
-        lr = 0.15 - (step - 391 * 13) / (391 * 26 - 391 * 13) * (0.15 - 0.01)
+        lr = lr_max - (step - 391 * 13) / (391 * 26 - 391 * 13) * (lr_max - lr_min)
     else:
-        lr = 0.01 - (step - 391 * 26) / (391 * 30 - 391 * 26) * (0.01 - 0.0)
+        lr = lr_min - (step - 391 * 26) / (391 * 30 - 391 * 26) * (lr_min - 0.0)
     return lr
 
 
