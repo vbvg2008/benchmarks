@@ -52,7 +52,7 @@ def my_model():
     return model
 
 
-def super_schedule(step, lr_max=0.125, lr_min=0.0125):
+def super_schedule(step, lr_max=0.05, lr_min=0.0125):
     if step < 391 * 13:
         lr = (lr_max - lr_min) / 391 / 13 * step + lr_min
     elif step < 391 * 26:

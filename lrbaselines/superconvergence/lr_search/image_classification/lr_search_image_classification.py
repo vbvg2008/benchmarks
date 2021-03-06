@@ -5,6 +5,7 @@ from fastestimator.op.numpyop.multivariate import HorizontalFlip, PadIfNeeded, R
 from fastestimator.op.numpyop.univariate import CoarseDropout, Normalize
 from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.schedule import cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.metric import Accuracy
 from tensorflow.python.keras import layers
@@ -52,20 +53,15 @@ def my_model():
     return model
 
 
-def super_schedule(step, lr_max=0.125, lr_min=0.0125):
-    if step < 391 * 13:
-        lr = (lr_max - lr_min) / 391 / 13 * step + lr_min
-    elif step < 391 * 26:
-        lr = lr_max - (step - 391 * 13) / (391 * 26 - 391 * 13) * (lr_max - lr_min)
-    else:
-        lr = lr_min - (step - 391 * 26) / (391 * 30 - 391 * 26) * (lr_min - 0.0)
+def linear_increase(step, min_lr=0.0, max_lr=3.0, num_steps=5000):
+    lr = step / num_steps * (max_lr - min_lr) + min_lr
     return lr
 
 
-def get_estimator(epochs=30, batch_size=128):
+def super_convergence(epochs=100, batch_size=128):
     # step 1
-    train_data, eval_data = fe.dataset.data.cifar10.load_data()
-
+    train_data, _ = fe.dataset.data.cifar10.load_data()
+    eval_data = train_data.split(0.2)
     pipeline = fe.Pipeline(
         train_data=train_data,
         eval_data=eval_data,
@@ -86,7 +82,17 @@ def get_estimator(epochs=30, batch_size=128):
     ])
     # step 3
     traces = [
-        Accuracy(true_key="y", pred_key="y_pred"), LRScheduler(model=model, lr_fn=lambda step: super_schedule(step))
+        Accuracy(true_key="y", pred_key="y_pred"),
+        LRScheduler(model=model, lr_fn=lambda step: linear_increase(step, num_steps=5000))
     ]
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, traces=traces)
-    return estimator
+    estimator = fe.Estimator(pipeline=pipeline,
+                             network=network,
+                             epochs=epochs,
+                             traces=traces,
+                             max_train_steps_per_epoch=10,
+                             log_steps=10)
+    estimator.fit()
+
+
+if __name__ == "__main__":
+    super_convergence()
