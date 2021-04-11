@@ -257,7 +257,6 @@ class YoloV5(nn.Module):
 
     def _initialize_detect_bias(self):
         for layer, stride in zip([self.conv17, self.conv20, self.conv23], self.stride):
-            pdb.set_trace()
             b = layer.bias.view(3, -1)  # conv.bias(255) to (3,85)
             b.data[:, 4] += math.log(8 / (640 / stride)**2)  # obj (8 objects per 640 image)
             b.data[:, 5:] += math.log(0.6 / (self.num_class - 0.99))  # cls
@@ -647,58 +646,21 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
                   restore_dir=tempfile.mkdtemp(),
                   epochs=300):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
-    train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
         batch_size=64,
         ops=[
-            ReadImage(inputs=("image1", "image2", "image3", "image4"),
-                      outputs=("image1", "image2", "image3", "image4"),
-                      mode="train"),
-            ReadImage(inputs="image", outputs="image", mode="eval"),
-            LongestMaxSize(max_size=640,
-                           image_in="image1",
-                           bbox_in="bbox1",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image2",
-                           bbox_in="bbox2",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image3",
-                           bbox_in="bbox3",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image4",
-                           bbox_in="bbox4",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image",
-                           bbox_in="bbox",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="eval"),
+            ReadImage(inputs="image", outputs="image"),
+            LongestMaxSize(max_size=640, image_in="image", bbox_in="bbox", bbox_params=BboxParams("coco",
+                                                                                                  min_area=1.0)),
             PadIfNeeded(min_height=640,
                         min_width=640,
                         image_in="image",
                         bbox_in="bbox",
                         bbox_params=BboxParams("coco", min_area=1.0),
-                        mode="eval",
                         border_mode=cv2.BORDER_CONSTANT,
                         value=(114, 114, 114)),
-            CombineMosaic(inputs=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4"),
-                          outputs=("image", "bbox"),
-                          mode="train"),
-            CenterCrop(height=640,
-                       width=640,
-                       image_in="image",
-                       bbox_in="bbox",
-                       bbox_params=BboxParams("coco", min_area=1.0),
-                       mode="train"),
             Sometimes(
                 HorizontalFlip(image_in="image",
                                bbox_in="bbox",
@@ -706,8 +668,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
                                mode="train")),
             HSVAugment(inputs="image", outputs="image", mode="train"),
             ToArray(inputs="bbox", outputs="bbox", dtype="float32"),
-            CategoryID2ClassID(inputs="bbox", outputs="bbox"),
-            Delete(keys=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4"), mode="train")
+            CategoryID2ClassID(inputs="bbox", outputs="bbox")
         ],
         pad_value=0)
     model = fe.build(
