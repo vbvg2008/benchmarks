@@ -21,72 +21,6 @@ from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
 from tensorflow.keras import layers
 from tensorflow.keras.initializers import Constant
-from torch.utils.data import Dataset
-
-
-# This dataset selects 4 images and its bboxes
-class PreMosaicDataset(Dataset):
-    def __init__(self, mscoco_ds):
-        self.mscoco_ds = mscoco_ds
-
-    def __len__(self):
-        return len(self.mscoco_ds)
-
-    def __getitem__(self, idx):
-        indices = [idx] + [random.randint(0, len(self) - 1) for _ in range(3)]
-        samples = [self.mscoco_ds[i] for i in indices]
-        return {
-            "image1": samples[0]["image"],
-            "bbox1": samples[0]["bbox"],
-            "image2": samples[1]["image"],
-            "bbox2": samples[1]["bbox"],
-            "image3": samples[2]["image"],
-            "bbox3": samples[2]["bbox"],
-            "image4": samples[3]["image"],
-            "bbox4": samples[3]["bbox"]
-        }
-
-
-class CombineMosaic(NumpyOp):
-    def forward(self, data, state):
-        image1, image2, image3, image4, bbox1, bbox2, bbox3, bbox4 = data
-        images = [image1, image2, image3, image4]
-        bboxes = [bbox1, bbox2, bbox3, bbox4]
-        images_new, boxes_new = self._combine_images_boxes(images, bboxes)
-        return images_new, boxes_new
-
-    def _combine_images_boxes(self, images, bboxes):
-        s = 640
-        yc, xc = int(random.uniform(320, 960)), int(random.uniform(320, 960))
-        images_new = np.full((1280, 1280, 3), fill_value=114, dtype=np.uint8)
-        bboxes_new = []
-        for idx, (image, bbox) in enumerate(zip(images, bboxes)):
-            h, w = image.shape[0], image.shape[1]
-            # place img in img4
-            if idx == 0:  # top left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
-            elif idx == 1:  # top right
-                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
-                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
-            elif idx == 2:  # bottom left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif idx == 3:  # bottom right
-                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
-                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
-            images_new[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]
-            padw, padh = x1a - x1b, y1a - y1b
-            for x1, y1, bw, bh, label in bbox:
-                x1_new = np.clip(x1 + padw, x1a, x2a)
-                y1_new = np.clip(y1 + padh, y1a, y2a)
-                x2_new = np.clip(x1 + padw + bw, x1a, x2a)
-                y2_new = np.clip(y1 + padh + bh, y1a, y2a)
-                bw_new = x2_new - x1_new
-                bh_new = y2_new - y1_new
-                if bw_new * bh_new > 1:
-                    bboxes_new.append((x1_new, y1_new, bw_new, bh_new, label))
-        return images_new, bboxes_new
 
 
 class HSVAugment(NumpyOp):
@@ -306,7 +240,7 @@ class ComputeLoss(TensorOp):
             conf_loss.append(self.get_conf_loss(conv_bbox_single, gt_bbox_single) / num_obj)
             bbox_loss.append(self.get_bbox_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj)
             cls_loss.append(self.get_cls_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj)
-        return 5 * tf.reduce_mean(bbox_loss), 0.5 * tf.reduce_mean(conf_loss), tf.reduce_mean(cls_loss)
+        return self.bbox_loss_multi  * tf.reduce_mean(bbox_loss), self.conf_loss_multi * tf.reduce_mean(conf_loss), tf.reduce_mean(cls_loss)
 
     def get_conf_loss(self, pred, gt):
         pred_conf, gt_conf = tf.reshape(pred[:, :, :, 4], (-1, 1)), tf.reshape(gt[:, :, :, 4], (-1, 1))
@@ -434,58 +368,21 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
                   restore_dir=tempfile.mkdtemp(),
                   epochs=300):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
-    train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
         batch_size=64,
         ops=[
-            ReadImage(inputs=("image1", "image2", "image3", "image4"),
-                      outputs=("image1", "image2", "image3", "image4"),
-                      mode="train"),
-            ReadImage(inputs="image", outputs="image", mode="eval"),
-            LongestMaxSize(max_size=640,
-                           image_in="image1",
-                           bbox_in="bbox1",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image2",
-                           bbox_in="bbox2",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image3",
-                           bbox_in="bbox3",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image4",
-                           bbox_in="bbox4",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="train"),
-            LongestMaxSize(max_size=640,
-                           image_in="image",
-                           bbox_in="bbox",
-                           bbox_params=BboxParams("coco", min_area=1.0),
-                           mode="eval"),
+            ReadImage(inputs="image", outputs="image"),
+            LongestMaxSize(max_size=640, image_in="image", bbox_in="bbox", bbox_params=BboxParams("coco",
+                                                                                                  min_area=1.0)),
             PadIfNeeded(min_height=640,
                         min_width=640,
                         image_in="image",
                         bbox_in="bbox",
                         bbox_params=BboxParams("coco", min_area=1.0),
-                        mode="eval",
                         border_mode=cv2.BORDER_CONSTANT,
                         value=(114, 114, 114)),
-            CombineMosaic(inputs=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4"),
-                          outputs=("image", "bbox"),
-                          mode="train"),
-            CenterCrop(height=640,
-                       width=640,
-                       image_in="image",
-                       bbox_in="bbox",
-                       bbox_params=BboxParams("coco", min_area=1.0),
-                       mode="train"),
             Sometimes(
                 HorizontalFlip(image_in="image",
                                bbox_in="bbox",
@@ -496,8 +393,6 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
             CategoryID2ClassID(inputs="bbox", outputs="bbox"),
             COCO2Yolo(inputs="bbox", outputs="bbox_yolo", width=640, height=640),
             GTBox(inputs="bbox_yolo", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), width=640, height=640),
-            Delete(keys=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4", "bbox_yolo"),
-                   mode="train")
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
