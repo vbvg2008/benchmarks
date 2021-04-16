@@ -50,8 +50,11 @@ class CategoryID2ClassID(NumpyOp):
         self.mapping = {k: v for k, v in zip(category, list(range(80)))}
 
     def forward(self, data, state):
-        classes = np.array([self.mapping[int(x)] for x in data[:, -1]], dtype="float32")
-        data[:, -1] = classes
+        if data.size > 0:
+            classes = np.array([self.mapping[int(x)] for x in data[:, -1]], dtype="float32")
+            data[:, -1] = classes
+        else:
+            data = np.zeros(shape=(1, 5), dtype="float32")
         return data
 
 
@@ -65,13 +68,19 @@ class GTBox(NumpyOp):
         self.anchor_l = [(116, 90), (156, 198), (373, 326)]
 
     def forward(self, data, state):
-        ious_s, anchor_boxes_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
-        ious_m, anchor_boxes_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
-        ious_l, anchor_boxes_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
-        matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
-        gt_sbbox = self._generate_target(matched_s, object_box_s, anchor_boxes_s, feature_size=80, label=label)
-        gt_mbbox = self._generate_target(matched_m, object_box_m, anchor_boxes_m, feature_size=40, label=label)
-        gt_lbbox = self._generate_target(matched_l, object_box_l, anchor_boxes_l, feature_size=20, label=label)
+        bbox = data[np.sum(data, 1) > 0]
+        if bbox.size > 0:
+            ious_s, anchor_boxes_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
+            ious_m, anchor_boxes_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
+            ious_l, anchor_boxes_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
+            matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
+            gt_sbbox = self._generate_target(matched_s, object_box_s, anchor_boxes_s, feature_size=80, label=label)
+            gt_mbbox = self._generate_target(matched_m, object_box_m, anchor_boxes_m, feature_size=40, label=label)
+            gt_lbbox = self._generate_target(matched_l, object_box_l, anchor_boxes_l, feature_size=20, label=label)
+        else:
+            gt_sbbox = np.zeros((80, 80, 3, 6), dtype="float32")
+            gt_mbbox = np.zeros((40, 40, 3, 6), dtype="float32")
+            gt_lbbox = np.zeros((20, 20, 3, 6), dtype="float32")
         return gt_sbbox, gt_mbbox, gt_lbbox
 
     def _match_boxes(self, ious_s, ious_m, ious_l):
@@ -114,7 +123,8 @@ class GTBox(NumpyOp):
                     anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
                     gt_bbox[anchor_yc_coord, anchor_xc_coord,
                             i][0:2] = (object_box[j][0:2] + object_box[j][2:4] / 2) % 1  # center offset w.r.t grid
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][2:4] = object_box[j][2:4] / feature_size
+                    gt_bbox[anchor_yc_coord, anchor_xc_coord,
+                            i][2:4] = np.log(object_box[j][2:4] / anchor_boxes[i][j][2:4])
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = 1.0
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][5] = label[j]
         return gt_bbox
@@ -247,9 +257,9 @@ class ComputeLoss(TensorOp):
 
     def get_bbox_loss(self, pred, gt):
         xy_pred, xy_gt = tf.sigmoid(pred[:, 0:2]), gt[:, 0:2]
-        wh_pred, wh_gt = tf.sigmoid(pred[:, 2:4]), gt[:, 2:4]
+        wh_pred, wh_gt = pred[:, 2:4], gt[:, 2:4]
         bbox_loss_xy = self.loss_bbox(xy_gt, xy_pred)
-        bbox_loss_wh = self.loss_bbox(tf.sqrt(wh_gt), tf.sqrt(wh_pred))
+        bbox_loss_wh = self.loss_bbox(wh_gt, wh_pred)
         return bbox_loss_xy + bbox_loss_wh
 
     def get_cls_loss(self, pred, gt):
@@ -289,6 +299,19 @@ class PredictBox(TensorOp):
         self.strides = [8, 16, 32]
         self.num_anchor = 3
         self.grids = self.create_grid(self.strides, self.num_anchor)
+        anchor_s = [(10, 13), (16, 30), (33, 23)]
+        anchor_m = [(30, 61), (62, 45), (59, 119)]
+        anchor_l = [(116, 90), (156, 198), (373, 326)]
+        self.anchors = self.create_anchor(anchor_s, anchor_m, anchor_l, self.strides)
+
+    def create_anchor(self, anchor_s, anchor_m, anchor_l, strides):
+        anchors = []
+        for anchor, stride in zip([anchor_s, anchor_m, anchor_l], strides):
+            feature_size_x, feature_size_y = self.width // stride, self.height // stride
+            anchor = np.array(anchor, dtype="float32").reshape((1, 1, 3, 2))
+            anchor = np.tile(anchor, [feature_size_y, feature_size_x, 1, 1])
+            anchors.append(tf.convert_to_tensor(anchor))
+        return anchors
 
     def create_grid(self, strides, num_anchor):
         grids = []
@@ -308,18 +331,17 @@ class PredictBox(TensorOp):
         for idx in range(batch_size):
             conv_bboxes = [conv_sbbox[idx], conv_mbbox[idx], conv_lbbox[idx]]
             selected_bboxes = []
-            for conv_bbox, (xx, yy), stride in zip(conv_bboxes, self.grids, self.strides):
+            for conv_bbox, (xx, yy), stride, anchor in zip(conv_bboxes, self.grids, self.strides, self.anchors):
                 # convert prediction to absolute scale
-                conv_bbox = tf.sigmoid(conv_bbox)
-                width_abs = conv_bbox[:, :, :, 2] * self.width
-                height_abs = conv_bbox[:, :, :, 3] * self.height
-                x1_abs = conv_bbox[:, :, :, 0] * stride + xx - width_abs / 2
-                y1_abs = conv_bbox[:, :, :, 1] * stride + yy - height_abs / 2
+                width_abs = np.exp(conv_bbox[:, :, :, 2]) * anchor[:, :, :, 0]
+                height_abs = np.exp(conv_bbox[:, :, :, 3]) * anchor[:, :, :, 1]
+                x1_abs = tf.sigmoid(conv_bbox[:, :, :, 0]) * stride + xx - width_abs / 2
+                y1_abs = tf.sigmoid(conv_bbox[:, :, :, 1]) * stride + yy - height_abs / 2
                 x2_abs = x1_abs + width_abs
                 y2_abs = y1_abs + height_abs
-                obj_score = conv_bbox[:, :, :, 4]
+                obj_score = tf.sigmoid(conv_bbox[:, :, :, 4])
                 label = tf.cast(tf.argmax(conv_bbox[:, :, :, 5:], axis=-1), tf.float32)
-                label_score = tf.reduce_max(conv_bbox[:, :, :, 5:], axis=-1)
+                label_score = tf.reduce_max(tf.sigmoid(conv_bbox[:, :, :, 5:]), axis=-1)
                 all_conv_bboxes = tf.stack([y1_abs, x1_abs, y2_abs, x2_abs, obj_score, label, label_score], axis=-1)
                 all_conv_bboxes = tf.reshape(all_conv_bboxes, (-1, 7))
                 # select the top 1k bboxes
@@ -351,25 +373,26 @@ class PredictBox(TensorOp):
 
 def lr_fn(step):
     if step < 2000:
-        lr = (0.01 - 0.0002) / 2000 * step + 0.0002
+        lr = (0.1 - 0.002) / 2000 * step + 0.002
     elif step < 1832 * 200:
-        lr = 0.01
+        lr = 0.1
     elif step < 1832 * 250:
-        lr = 0.001
+        lr = 0.01
     else:
-        lr = 0.0001
+        lr = 0.001
     return lr
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
-                  epochs=300):
+                  epochs=300,
+                  batch_size=64):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
-        batch_size=64,
+        batch_size=batch_size,
         ops=[
             ReadImage(inputs="image", outputs="image"),
             LongestMaxSize(max_size=640, image_in="image", bbox_in="bbox", bbox_params=BboxParams("coco",
