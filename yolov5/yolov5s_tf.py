@@ -118,25 +118,9 @@ class CategoryID2ClassID(NumpyOp):
         self.mapping = {k: v for k, v in zip(category, list(range(80)))}
 
     def forward(self, data, state):
-        if data.size > 0:
-            classes = np.array([self.mapping[int(x)] for x in data[:, -1]], dtype="float32")
-            data[:, -1] = classes
-        else:
-            data = np.zeros(shape=(1, 5), dtype="float32")
+        classes = np.array([self.mapping[int(x)] for x in data[:, -1]], dtype="float32")
+        data[:, -1] = classes
         return data
-
-
-class COCO2Yolo(NumpyOp):
-    def __init__(self, inputs, outputs, width, height, mode=None):
-        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.width = width
-        self.height = height
-
-    def forward(self, data, state):
-        x1, y1, w, h, label = np.split(data, 5, axis=1)
-        xc, yc = (x1 + w / 2) / self.width, (y1 + h / 2) / self.height
-        w_rario, h_ratio = w / self.width, h / self.height
-        return np.concatenate([xc, yc, w_rario, h_ratio, label], axis=1)
 
 
 class GTBox(NumpyOp):
@@ -149,55 +133,66 @@ class GTBox(NumpyOp):
         self.anchor_l = [(116, 90), (156, 198), (373, 326)]
 
     def forward(self, data, state):
-        gt_sbbox = self._generate_target(data, anchors=self.anchor_s, feature_size=80)
-        gt_mbbox = self._generate_target(data, anchors=self.anchor_m, feature_size=40)
-        gt_lbbox = self._generate_target(data, anchors=self.anchor_l, feature_size=20)
+        ious_s, anchor_boxes_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
+        ious_m, anchor_boxes_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
+        ious_l, anchor_boxes_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
+        matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
+        gt_sbbox = self._generate_target(matched_s, object_box_s, anchor_boxes_s, feature_size=80, label=label)
+        gt_mbbox = self._generate_target(matched_m, object_box_m, anchor_boxes_m, feature_size=40, label=label)
+        gt_lbbox = self._generate_target(matched_l, object_box_l, anchor_boxes_l, feature_size=20, label=label)
         return gt_sbbox, gt_mbbox, gt_lbbox
 
-    def get_anchor_boxes(self, object_boxes, anchors, feature_size):
+    def _match_boxes(self, ious_s, ious_m, ious_l):
+        ious = np.concatenate([ious_s, ious_m, ious_l], axis=0)
+        matched = ious > 0.3  # anything > 0.3 IOU gets a match
+        matched[np.argmax(ious, 0), range(ious.shape[1])] = True  # anchor box with highest IOU of each object match
+        return matched[:3, :], matched[3:6, :], matched[6:, :]
+
+    @staticmethod
+    def img2feature(x, feature_size, image_size):
+        return x / image_size * feature_size
+
+    def get_anchor_boxes(self, object_box, anchors, feature_size):
         anchor_boxes = []
+        xc = np.floor(self.img2feature(object_box[:, 0:1] + object_box[:, 2:3] / 2, feature_size, self.width)) + 0.5
+        yc = np.floor(self.img2feature(object_box[:, 1:2] + object_box[:, 3:4] / 2, feature_size, self.height)) + 0.5
         for (anchor_w, anchor_h) in anchors:
-            xc = (np.floor(object_boxes[:, 0:1] * feature_size) + 0.5) / feature_size
-            yc = (np.floor(object_boxes[:, 1:2] * feature_size) + 0.5) / feature_size
-            anchor_box = np.concatenate(
-                [xc, yc, anchor_w / self.width * np.ones_like(xc), anchor_h / self.height * np.ones_like(xc)], axis=1)
+            anchor_w = self.img2feature(anchor_w, feature_size, self.width)
+            anchor_h = self.img2feature(anchor_h, feature_size, self.height)
+            x1 = xc - anchor_w / 2
+            y1 = yc - anchor_h / 2
+            anchor_box = np.concatenate([x1, y1, anchor_w * np.ones_like(x1), anchor_h * np.ones_like(x1)], axis=1)
             anchor_boxes.append(anchor_box)
         return anchor_boxes
 
-    def _generate_target(self, bbox, anchors, feature_size):
-        object_boxes, label = bbox[:, :-1], bbox[:, -1]
+    def _prepare_boxes(self, bbox, anchors, feature_size):
+        object_box, label = bbox[:, :-1], bbox[:, -1]
+        anchor_boxes = self.get_anchor_boxes(object_box, anchors, feature_size)  #x1, y1, w, h
+        object_box = self.img2feature(object_box, feature_size, 640)  #x1, y1, w, h
+        ious = np.stack([np.diag(self._get_iou(object_box, anchor_box)) for anchor_box in anchor_boxes])
+        return ious, anchor_boxes, object_box, label
+
+    def _generate_target(self, matched, object_box, anchor_boxes, feature_size, label):
         gt_bbox = np.zeros((feature_size, feature_size, 3, 6), dtype="float32")
-        num_objects = object_boxes.shape[0]
-        anchor_boxes = self.get_anchor_boxes(object_boxes, anchors, feature_size)
-        ious = np.stack([np.diag(self._get_iou(object_boxes, anchor_box)) for anchor_box in anchor_boxes])
-        matched = ious > 0.3  # any IOU >0.3 centered at object center in feature map gets a match
-        matched[np.argmax(ious, 0), range(num_objects)] = True  # the highest IOU of each object gets a match
+        num_objects = object_box.shape[0]
         for i in range(len(anchor_boxes)):
             for j in range(num_objects):
                 if matched[i, j]:
-                    anchor_xc_coord = int(anchor_boxes[i][j][0] * feature_size)
-                    anchor_yc_coord = int(anchor_boxes[i][j][1] * feature_size)
+                    anchor_xc_coord = int(anchor_boxes[i][j][0] + anchor_boxes[i][j][2] / 2)
+                    anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
                     gt_bbox[anchor_yc_coord, anchor_xc_coord,
-                            i][0:2] = (object_boxes[j][0:2] - anchor_boxes[i][j][0:2] +
-                                       1 / feature_size / 2) * feature_size  #center w.r.t the gridcell
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][2:4] = object_boxes[j][2:4]  #width and height
+                            i][0:2] = (object_box[j][0:2] + object_box[j][2:4] / 2) % 1  # center offset w.r.t grid
+                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][2:4] = object_box[j][2:4] / feature_size
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = 1.0
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][5] = label[j]
         return gt_bbox
 
     @staticmethod
     def _get_iou(boxes1, boxes2):
-        """Computes the value of intersection over union (IoU) of two array of boxes.
-        Args:
-            box1 (array): first boxes in N x 4
-            box2 (array): second box in M x 4
-        Returns:
-            float: IoU value in N x M
-        """
-        x1c, y1c, w1, h1 = np.split(boxes1, 4, axis=1)
-        x2c, y2c, w2, h2 = np.split(boxes2, 4, axis=1)
-        x11, x12, y11, y12 = x1c - w1 / 2, x1c + w1 / 2, y1c - h1 / 2, y1c + h1 / 2
-        x21, x22, y21, y22 = x2c - w2 / 2, x2c + w2 / 2, y2c - h2 / 2, y2c + h2 / 2
+        x11, y11, w1, h1 = np.split(boxes1, 4, axis=1)
+        x21, y21, w2, h2 = np.split(boxes2, 4, axis=1)
+        x12, y12 = x11 + w1, y11 + h1
+        x22, y22 = x21 + w2, y21 + h2
         xmin = np.maximum(x11, np.transpose(x21))
         ymin = np.maximum(y11, np.transpose(y21))
         xmax = np.minimum(x12, np.transpose(x22))
@@ -291,22 +286,27 @@ class ComputeLoss(TensorOp):
         self.loss_conf = tf.losses.BinaryCrossentropy(from_logits=True, reduction='sum')
         self.loss_bbox = tf.losses.MeanSquaredError(reduction='sum')
         self.loss_cls = tf.losses.BinaryCrossentropy(from_logits=True, reduction='sum')
-        self.bbox_loss_multi = 5
-        self.conf_loss_multi = 0.5
+        self.bbox_loss_multi = 10
+        self.conf_loss_multi = 0.05
+        self.cls_loss_multi = 1.0
 
     def forward(self, data, state):
         conv_bbox, gt_bbox = data
         batch_size = gt_bbox.shape[0]
-        bbox_loss, conf_loss, cls_loss = [], [], []
+        bbox_loss, conf_loss, cls_loss = tf.zeros(()), tf.zeros(()), tf.zeros(())
         for idx in range(batch_size):
             conv_bbox_single, gt_bbox_single = conv_bbox[idx], gt_bbox[idx]
+            conf_loss += self.get_conf_loss(conv_bbox_single, gt_bbox_single)
             has_obj = gt_bbox_single[:, :, :, 4] == 1.0
             conv_bbox_single_obj, gt_bbox_single_obj = conv_bbox_single[has_obj], gt_bbox_single[has_obj]
             num_obj = tf.cast(tf.shape(conv_bbox_single_obj)[0], tf.float32)
-            conf_loss.append(self.get_conf_loss(conv_bbox_single, gt_bbox_single) / num_obj)
-            bbox_loss.append(self.get_bbox_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj)
-            cls_loss.append(self.get_cls_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj)
-        return 5 * tf.reduce_mean(bbox_loss), 0.5 * tf.reduce_mean(conf_loss), tf.reduce_mean(cls_loss)
+            if num_obj > 0:
+                bbox_loss += self.get_bbox_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj
+                cls_loss += self.get_cls_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj
+        final_bbox_loss = self.bbox_loss_multi * bbox_loss / tf.cast(batch_size, tf.float32)
+        final_conf_loss = self.conf_loss_multi * conf_loss / tf.cast(batch_size, tf.float32)
+        final_cls_loss = self.cls_loss_multi * cls_loss / tf.cast(batch_size, tf.float32)
+        return final_bbox_loss, final_conf_loss, final_cls_loss
 
     def get_conf_loss(self, pred, gt):
         pred_conf, gt_conf = tf.reshape(pred[:, :, :, 4], (-1, 1)), tf.reshape(gt[:, :, :, 4], (-1, 1))
@@ -317,7 +317,7 @@ class ComputeLoss(TensorOp):
         xy_pred, xy_gt = tf.sigmoid(pred[:, 0:2]), gt[:, 0:2]
         wh_pred, wh_gt = tf.sigmoid(pred[:, 2:4]), gt[:, 2:4]
         bbox_loss_xy = self.loss_bbox(xy_gt, xy_pred)
-        bbox_loss_wh = self.loss_bbox(tf.sqrt(wh_gt), wh_pred)
+        bbox_loss_wh = self.loss_bbox(tf.sqrt(wh_gt), tf.sqrt(wh_pred))
         return bbox_loss_xy + bbox_loss_wh
 
     def get_cls_loss(self, pred, gt):
@@ -432,13 +432,14 @@ def lr_fn(step):
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
-                  epochs=300):
+                  epochs=300,
+                  batch_size=64):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
-        batch_size=64,
+        batch_size=batch_size,
         ops=[
             ReadImage(inputs=("image1", "image2", "image3", "image4"),
                       outputs=("image1", "image2", "image3", "image4"),
@@ -494,10 +495,8 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
             HSVAugment(inputs="image", outputs="image", mode="train"),
             ToArray(inputs="bbox", outputs="bbox", dtype="float32"),
             CategoryID2ClassID(inputs="bbox", outputs="bbox"),
-            COCO2Yolo(inputs="bbox", outputs="bbox_yolo", width=640, height=640),
-            GTBox(inputs="bbox_yolo", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), width=640, height=640),
-            Delete(keys=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4", "bbox_yolo"),
-                   mode="train")
+            GTBox(inputs="bbox", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), width=640, height=640),
+            Delete(keys=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4"), mode="train")
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
