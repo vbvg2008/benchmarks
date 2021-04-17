@@ -333,8 +333,8 @@ class PredictBox(TensorOp):
             selected_bboxes = []
             for conv_bbox, (xx, yy), stride, anchor in zip(conv_bboxes, self.grids, self.strides, self.anchors):
                 # convert prediction to absolute scale
-                width_abs = np.exp(conv_bbox[:, :, :, 2]) * anchor[:, :, :, 0]
-                height_abs = np.exp(conv_bbox[:, :, :, 3]) * anchor[:, :, :, 1]
+                width_abs = tf.exp(conv_bbox[:, :, :, 2]) * anchor[:, :, :, 0]
+                height_abs = tf.exp(conv_bbox[:, :, :, 3]) * anchor[:, :, :, 1]
                 x1_abs = tf.sigmoid(conv_bbox[:, :, :, 0]) * stride + xx - width_abs / 2
                 y1_abs = tf.sigmoid(conv_bbox[:, :, :, 1]) * stride + yy - height_abs / 2
                 x2_abs = x1_abs + width_abs
@@ -374,9 +374,9 @@ class PredictBox(TensorOp):
 def lr_fn(step):
     if step < 2000:
         lr = (0.1 - 0.002) / 2000 * step + 0.002
-    elif step < 1832 * 200:
+    elif step < 1833 * 200:
         lr = 0.1
-    elif step < 1832 * 250:
+    elif step < 1833 * 250:
         lr = 0.01
     else:
         lr = 0.001
