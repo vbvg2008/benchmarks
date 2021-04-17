@@ -260,7 +260,7 @@ class ComputeLoss(TensorOp):
         wh_pred, wh_gt = pred[:, 2:4], gt[:, 2:4]
         bbox_loss_xy = self.loss_bbox(xy_gt, xy_pred)
         bbox_loss_wh = self.loss_bbox(wh_gt, wh_pred)
-        return bbox_loss_xy + bbox_loss_wh
+        return bbox_loss_xy + bbox_loss_wh / 100
 
     def get_cls_loss(self, pred, gt):
         cls_pred, cls_gt = pred[:, 5:], tf.cast(gt[:, 5], tf.int32)
