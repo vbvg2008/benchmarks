@@ -153,8 +153,9 @@ class GTBox(NumpyOp):
 
     def _match_boxes(self, ious_s, ious_m, ious_l):
         ious = np.concatenate([ious_s, ious_m, ious_l], axis=0)
-        matched = ious > 0.3  # anything > 0.3 IOU gets a match
-        matched[np.argmax(ious, 0), range(ious.shape[1])] = True  # anchor box with highest IOU of each object match
+        matched = np.zeros_like(ious)
+        matched[ious > 0.3] = -1  # anything > 0.3 IOU is marked -1
+        matched[np.argmax(ious, 0), range(ious.shape[1])] = 1  # anchor box with highest IOU is marked 1
         return matched[:3, :], matched[3:6, :], matched[6:, :]
 
     @staticmethod
@@ -186,15 +187,17 @@ class GTBox(NumpyOp):
         num_objects = object_box.shape[0]
         for i in range(len(anchor_boxes)):
             for j in range(num_objects):
-                if matched[i, j]:
-                    anchor_xc_coord = int(anchor_boxes[i][j][0] + anchor_boxes[i][j][2] / 2)
-                    anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
+                anchor_xc_coord = int(anchor_boxes[i][j][0] + anchor_boxes[i][j][2] / 2)
+                anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
+                if matched[i, j] == 1:
                     gt_bbox[anchor_yc_coord, anchor_xc_coord,
                             i][0:2] = (object_box[j][0:2] + object_box[j][2:4] / 2) % 1  # center offset w.r.t grid
                     gt_bbox[anchor_yc_coord, anchor_xc_coord,
                             i][2:4] = np.log(object_box[j][2:4] / anchor_boxes[i][j][2:4])
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = 1.0
                     gt_bbox[anchor_yc_coord, anchor_xc_coord, i][5] = label[j]
+                elif matched[i, j] == -1:
+                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = -1.0  # ignore these boxes later
         return gt_bbox
 
     @staticmethod
@@ -306,8 +309,9 @@ class ComputeLoss(TensorOp):
         bbox_loss, conf_loss, cls_loss = tf.zeros(()), tf.zeros(()), tf.zeros(())
         for idx in range(batch_size):
             conv_bbox_single, gt_bbox_single = conv_bbox[idx], gt_bbox[idx]
-            conf_loss += self.get_conf_loss(conv_bbox_single, gt_bbox_single)
+            consider_conf = gt_bbox_single[:, :, :, 4] > -1.0
             has_obj = gt_bbox_single[:, :, :, 4] == 1.0
+            conf_loss += self.get_conf_loss(conv_bbox_single[consider_conf], gt_bbox_single[consider_conf])
             conv_bbox_single_obj, gt_bbox_single_obj = conv_bbox_single[has_obj], gt_bbox_single[has_obj]
             num_obj = tf.cast(tf.shape(conv_bbox_single_obj)[0], tf.float32)
             if num_obj > 0:
@@ -319,7 +323,7 @@ class ComputeLoss(TensorOp):
         return final_bbox_loss, final_conf_loss, final_cls_loss
 
     def get_conf_loss(self, pred, gt):
-        pred_conf, gt_conf = tf.reshape(pred[:, :, :, 4], (-1, 1)), tf.reshape(gt[:, :, :, 4], (-1, 1))
+        pred_conf, gt_conf = tf.reshape(pred[:, 4], (-1, 1)), tf.reshape(gt[:, 4], (-1, 1))
         conf_loss = self.loss_conf(gt_conf, pred_conf)
         return conf_loss
 
