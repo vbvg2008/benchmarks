@@ -131,73 +131,74 @@ class GTBox(NumpyOp):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.width = width
         self.height = height
-        self.anchor_s = [(10, 13), (16, 30), (33, 23)]
-        self.anchor_m = [(30, 61), (62, 45), (59, 119)]
-        self.anchor_l = [(116, 90), (156, 198), (373, 326)]
+        self.anchor_s = self.get_anchor_boxes([(10, 13), (16, 30), (33, 23)], 80)
+        self.anchor_m = self.get_anchor_boxes([(30, 61), (62, 45), (59, 119)], 40)
+        self.anchor_l = self.get_anchor_boxes([(116, 90), (156, 198), (373, 326)], 20)
 
     def forward(self, data, state):
         bbox = data[np.sum(data, 1) > 0]
         if bbox.size > 0:
-            ious_s, anchor_boxes_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
-            ious_m, anchor_boxes_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
-            ious_l, anchor_boxes_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
+            ious_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
+            ious_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
+            ious_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
             matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
-            gt_sbbox = self._generate_target(matched_s, object_box_s, anchor_boxes_s, feature_size=80, label=label)
-            gt_mbbox = self._generate_target(matched_m, object_box_m, anchor_boxes_m, feature_size=40, label=label)
-            gt_lbbox = self._generate_target(matched_l, object_box_l, anchor_boxes_l, feature_size=20, label=label)
+            gt_sbbox = self._generate_target(matched_s, object_box_s, self.anchor_s, feature_size=80, label=label)
+            gt_mbbox = self._generate_target(matched_m, object_box_m, self.anchor_m, feature_size=40, label=label)
+            gt_lbbox = self._generate_target(matched_l, object_box_l, self.anchor_l, feature_size=20, label=label)
         else:
             gt_sbbox = np.zeros((80, 80, 3, 6), dtype="float32")
             gt_mbbox = np.zeros((40, 40, 3, 6), dtype="float32")
             gt_lbbox = np.zeros((20, 20, 3, 6), dtype="float32")
         return gt_sbbox, gt_mbbox, gt_lbbox
 
+    def get_anchor_boxes(self, anchor_wh, feature_size):
+        xc_coor, yc_coor = [i + 0.5 for i in range(feature_size)], [i + 0.5 for i in range(feature_size)]
+        xc, yc = np.meshgrid(xc_coor, yc_coor)
+        xc, yc = np.float32(xc), np.float32(yc)
+        xc, yc = np.stack([xc] * len(anchor_wh), axis=-1), np.stack([yc] * len(anchor_wh), axis=-1)
+        anchor_wh = self.img2feature(np.array(anchor_wh, dtype="float32").reshape(1, 1, 3, 2), feature_size, 640)
+        anchor_wh = np.tile(anchor_wh, [feature_size, feature_size, 1, 1])
+        anchor_width, anchor_height = anchor_wh[..., 0], anchor_wh[..., 1]
+        x1, y1 = xc - anchor_width / 2, yc - anchor_height / 2
+        anchor_boxes = np.stack([x1, y1, anchor_width, anchor_height], axis=-1)
+        return np.reshape(anchor_boxes, (-1, 4))
+
     def _match_boxes(self, ious_s, ious_m, ious_l):
-        ious = np.concatenate([ious_s, ious_m, ious_l], axis=0)
+        num_anchors = np.cumsum([ious_s.shape[1], ious_m.shape[1], ious_l.shape[1]])
+        ious = np.concatenate([ious_s, ious_m, ious_l], axis=1)
         matched = np.zeros_like(ious)
-        matched[ious > 0.3] = -1  # anything > 0.3 IOU is marked -1
-        matched[np.argmax(ious, 0), range(ious.shape[1])] = 1  # anchor box with highest IOU is marked 1
-        return matched[:3, :], matched[3:6, :], matched[6:, :]
+        matched[ious > 0.5] = -1  # anything > 0.5 IOU is marked -1
+        matched = np.min(matched, axis=0)
+        best_match_boxes = np.argmax(ious, 1)
+        for obj_idx, box_idx in enumerate(best_match_boxes):
+            matched[box_idx] = obj_idx + 1  #object index starting from 1
+        return matched[:num_anchors[0]], matched[num_anchors[0]:num_anchors[1]], matched[num_anchors[1]:]
 
     @staticmethod
     def img2feature(x, feature_size, image_size):
         return x / image_size * feature_size
 
-    def get_anchor_boxes(self, object_box, anchors, feature_size):
-        anchor_boxes = []
-        xc = np.floor(self.img2feature(object_box[:, 0:1] + object_box[:, 2:3] / 2, feature_size, self.width)) + 0.5
-        yc = np.floor(self.img2feature(object_box[:, 1:2] + object_box[:, 3:4] / 2, feature_size, self.height)) + 0.5
-        for (anchor_w, anchor_h) in anchors:
-            anchor_w = self.img2feature(anchor_w, feature_size, self.width)
-            anchor_h = self.img2feature(anchor_h, feature_size, self.height)
-            x1 = xc - anchor_w / 2
-            y1 = yc - anchor_h / 2
-            anchor_box = np.concatenate([x1, y1, anchor_w * np.ones_like(x1), anchor_h * np.ones_like(x1)], axis=1)
-            anchor_boxes.append(anchor_box)
-        return anchor_boxes
-
     def _prepare_boxes(self, bbox, anchors, feature_size):
         object_box, label = bbox[:, :-1], bbox[:, -1]
-        anchor_boxes = self.get_anchor_boxes(object_box, anchors, feature_size)  #x1, y1, w, h
         object_box = self.img2feature(object_box, feature_size, 640)  #x1, y1, w, h
-        ious = np.stack([np.diag(self._get_iou(object_box, anchor_box)) for anchor_box in anchor_boxes])
-        return ious, anchor_boxes, object_box, label
+        ious = self._get_iou(object_box, anchors)
+        return ious, object_box, label
 
     def _generate_target(self, matched, object_box, anchor_boxes, feature_size, label):
         gt_bbox = np.zeros((feature_size, feature_size, 3, 6), dtype="float32")
-        num_objects = object_box.shape[0]
-        for i in range(len(anchor_boxes)):
-            for j in range(num_objects):
-                anchor_xc_coord = int(anchor_boxes[i][j][0] + anchor_boxes[i][j][2] / 2)
-                anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
-                if matched[i, j] == 1:
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord,
-                            i][0:2] = (object_box[j][0:2] + object_box[j][2:4] / 2) % 1  # center offset w.r.t grid
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord,
-                            i][2:4] = np.log(object_box[j][2:4] / anchor_boxes[i][j][2:4])
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = 1.0
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][5] = label[j]
-                elif matched[i, j] == -1:
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = -1.0  # ignore these boxes later
+        matched = matched.reshape(feature_size, feature_size, 3)
+        anchor_boxes = anchor_boxes.reshape(feature_size, feature_size, 3, 4)
+        y_locs, x_locs, a_locs = np.where(matched != 0)
+        for y_loc, x_loc, a_loc in zip(y_locs, x_locs, a_locs):
+            if matched[y_loc, x_loc, a_loc] == -1:
+                gt_bbox[y_loc, x_loc, a_loc][4] = -1.0  # ignore these boxes later
+            elif matched[y_loc, x_loc, a_loc] > 0:
+                obj_idx = int(matched[y_loc, x_loc, a_loc]) - 1
+                gt_bbox[y_loc, x_loc, a_loc][0:2] = (object_box[obj_idx][0:2] + object_box[obj_idx][2:4] / 2) % 1
+                gt_bbox[y_loc, x_loc,
+                        a_loc][2:4] = np.log(object_box[obj_idx][2:4] / anchor_boxes[y_loc, x_loc, a_loc][2:4])
+                gt_bbox[y_loc, x_loc, a_loc][4] = 1.0
+                gt_bbox[y_loc, x_loc, a_loc][5] = label[obj_idx]
         return gt_bbox
 
     @staticmethod
