@@ -127,92 +127,54 @@ class CategoryID2ClassID(NumpyOp):
 
 
 class GTBox(NumpyOp):
-    def __init__(self, inputs, outputs, width, height, mode=None):
+    def __init__(self, inputs, outputs, image_size, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.width = width
-        self.height = height
-        self.anchor_s = self.get_anchor_boxes([(10, 13), (16, 30), (33, 23)], 80)
-        self.anchor_m = self.get_anchor_boxes([(30, 61), (62, 45), (59, 119)], 40)
-        self.anchor_l = self.get_anchor_boxes([(116, 90), (156, 198), (373, 326)], 20)
+        self.image_size = image_size
+        self.anchor_s = [(10, 13), (16, 30), (33, 23)]
+        self.anchor_m = [(30, 61), (62, 45), (59, 119)]
+        self.anchor_l = [(116, 90), (156, 198), (373, 326)]
 
     def forward(self, data, state):
         bbox = data[np.sum(data, 1) > 0]
         if bbox.size > 0:
-            ious_s = self._prepare_boxes(data, self.anchor_s, 80)
-            ious_m = self._prepare_boxes(data, self.anchor_m, 40)
-            ious_l = self._prepare_boxes(data, self.anchor_l, 20)
-            matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
-            gt_sbbox = self._generate_target(matched_s, data, feature_size=80)
-            gt_mbbox = self._generate_target(matched_m, data, feature_size=40)
-            gt_lbbox = self._generate_target(matched_l, data, feature_size=20)
+            gt_sbbox = self._generate_target(data, anchors=self.anchor_s, feature_size=80)
+            gt_mbbox = self._generate_target(data, anchors=self.anchor_m, feature_size=40)
+            gt_lbbox = self._generate_target(data, anchors=self.anchor_l, feature_size=20)
         else:
             gt_sbbox = np.zeros((80, 80, 3, 6), dtype="float32")
             gt_mbbox = np.zeros((40, 40, 3, 6), dtype="float32")
             gt_lbbox = np.zeros((20, 20, 3, 6), dtype="float32")
         return gt_sbbox, gt_mbbox, gt_lbbox
 
-    def get_anchor_boxes(self, anchor_wh, feature_size):
-        xc_coor, yc_coor = [i + 0.5 for i in range(feature_size)], [i + 0.5 for i in range(feature_size)]
-        xc, yc = np.meshgrid(xc_coor, yc_coor)
-        xc, yc = np.float32(xc), np.float32(yc)
-        xc, yc = np.stack([xc] * len(anchor_wh), axis=-1), np.stack([yc] * len(anchor_wh), axis=-1)
-        anchor_wh = self.img2feature(np.array(anchor_wh, dtype="float32").reshape(1, 1, 3, 2), feature_size, 640)
-        anchor_wh = np.tile(anchor_wh, [feature_size, feature_size, 1, 1])
-        anchor_width, anchor_height = anchor_wh[..., 0], anchor_wh[..., 1]
-        x1, y1 = xc - anchor_width / 2, yc - anchor_height / 2
-        anchor_boxes = np.stack([x1, y1, anchor_width, anchor_height], axis=-1)
-        return np.reshape(anchor_boxes, (-1, 4))
-
-    def _match_boxes(self, ious_s, ious_m, ious_l):
-        num_anchors = np.cumsum([ious_s.shape[1], ious_m.shape[1], ious_l.shape[1]])
-        ious = np.concatenate([ious_s, ious_m, ious_l], axis=1)
-        matched = np.zeros_like(ious)
-        matched[ious > 0.4] = -1  # anything > 0.4 IOU is marked -1
-        matched = np.min(matched, axis=0)
-        best_match_boxes = np.argmax(ious, 1)
-        for obj_idx, box_idx in enumerate(best_match_boxes):
-            matched[box_idx] = obj_idx + 1  #object index starting from 1
-        return matched[:num_anchors[0]], matched[num_anchors[0]:num_anchors[1]], matched[num_anchors[1]:]
-
-    @staticmethod
-    def img2feature(x, feature_size, image_size):
-        return x / image_size * feature_size
-
-    def _prepare_boxes(self, bbox, anchors, feature_size):
-        object_box = bbox[:, :-1]
-        object_box = self.img2feature(object_box, feature_size, 640)  #x1, y1, w, h
-        ious = self._get_iou(object_box, anchors)
-        return ious
-
-    def _generate_target(self, matched, bbox, feature_size):
+    def _generate_target(self, bbox, anchors, feature_size, wh_threshold=4.0):
+        object_boxes, label = bbox[:, :-1], bbox[:, -1]
         gt_bbox = np.zeros((feature_size, feature_size, 3, 6), dtype="float32")
-        matched = matched.reshape(feature_size, feature_size, 3)
-        y_locs, x_locs, a_locs = np.where(matched != 0)
-        for y_loc, x_loc, a_loc in zip(y_locs, x_locs, a_locs):
-            if matched[y_loc, x_loc, a_loc] == -1:
-                gt_bbox[y_loc, x_loc, a_loc][4] = -1.0  # ignore these boxes later
-            elif matched[y_loc, x_loc, a_loc] > 0:
-                obj_idx = int(matched[y_loc, x_loc, a_loc]) - 1
-                gt_bbox[y_loc, x_loc, a_loc][0:4] = bbox[obj_idx][:-1]  #xywh absolute
-                gt_bbox[y_loc, x_loc, a_loc][4] = 1.0
-                gt_bbox[y_loc, x_loc, a_loc][5] = bbox[obj_idx][-1]  #label
+        for object_idx, object_box in enumerate(object_boxes):
+            for anchor_idx, anchor in enumerate(anchors):
+                ratio = object_box[2:] / np.array(anchor, dtype="float32")
+                match = np.max(np.maximum(ratio, 1 / ratio)) < wh_threshold
+                if match:
+                    center_feature_map = (object_box[:2] + object_box[2:] / 2) / self.image_size * feature_size
+                    candidate_coords = self._get_candidate_coords(center_feature_map, feature_size)
+                    for xc, yc in candidate_coords:
+                        gt_bbox[yc, xc, anchor_idx][:4] = object_box  # use absoulte x1,y1,w,h
+                        gt_bbox[yc, xc, anchor_idx][4] = 1.0
+                        gt_bbox[yc, xc, anchor_idx][5] = label[object_idx]
         return gt_bbox
 
     @staticmethod
-    def _get_iou(boxes1, boxes2):
-        x11, y11, w1, h1 = np.split(boxes1, 4, axis=1)
-        x21, y21, w2, h2 = np.split(boxes2, 4, axis=1)
-        x12, y12 = x11 + w1, y11 + h1
-        x22, y22 = x21 + w2, y21 + h2
-        xmin = np.maximum(x11, np.transpose(x21))
-        ymin = np.maximum(y11, np.transpose(y21))
-        xmax = np.minimum(x12, np.transpose(x22))
-        ymax = np.minimum(y12, np.transpose(y22))
-        inter_area = np.maximum((xmax - xmin + 1), 0) * np.maximum((ymax - ymin + 1), 0)
-        area1 = (w1 + 1) * (h1 + 1)
-        area2 = (w2 + 1) * (h2 + 1)
-        iou = inter_area / (area1 + area2.T - inter_area)
-        return iou
+    def _get_candidate_coords(center_feature_map, feature_size):
+        xc, yc = center_feature_map
+        candidate_coords = [(int(xc), int(yc))]
+        if xc % 1 < 0.5 and xc > 1:
+            candidate_coords.append((int(xc) - 1, int(yc)))
+        if xc % 1 >= 0.5 and xc < feature_size - 1:
+            candidate_coords.append((int(xc) + 1, int(yc)))
+        if yc % 1 < 0.5 and yc > 1:
+            candidate_coords.append((int(xc), int(yc) - 1))
+        if yc % 1 >= 0.5 and yc < feature_size - 1:
+            candidate_coords.append((int(xc), int(yc) + 1))
+        return candidate_coords
 
 
 def conv_block(x, c, k=1, s=1):
@@ -292,66 +254,61 @@ def yolov5(input_shape, num_classes, strides=(8, 16, 32)):
 
 
 class ComputeLoss(TensorOp):
-    def __init__(self, inputs, outputs, mode=None):
+    def __init__(self, inputs, outputs, img_size=640, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.loss_conf = tf.losses.BinaryCrossentropy(reduction='sum')
-        self.loss_cls = tf.losses.BinaryCrossentropy(reduction='sum')
-        self.bbox_loss_multi = 10
-        self.conf_loss_multi = 0.1
-        self.cls_loss_multi = 1.0
+        self.loss_conf = tf.losses.BinaryCrossentropy(reduction="none")
+        self.loss_cls = tf.losses.BinaryCrossentropy(reduction="none")
+        self.img_size = img_size
 
     def forward(self, data, state):
-        pred_bbox, gt_bbox = data
-        batch_size = gt_bbox.shape[0]
-        bbox_loss, conf_loss, cls_loss = tf.zeros(()), tf.zeros(()), tf.zeros(())
-        for idx in range(batch_size):
-            pred_bbox_single, gt_bbox_single = pred_bbox[idx], gt_bbox[idx]
-            consider_conf = gt_bbox_single[:, :, :, 4] > -1.0
-            has_obj = gt_bbox_single[:, :, :, 4] == 1.0
-            conf_loss += self.get_conf_loss(pred_bbox_single[consider_conf], gt_bbox_single[consider_conf])
-            conv_bbox_single_obj, gt_bbox_single_obj = pred_bbox_single[has_obj], gt_bbox_single[has_obj]
-            num_obj = tf.cast(tf.shape(conv_bbox_single_obj)[0], tf.float32)
-            if num_obj > 0:
-                bbox_loss += self.get_iou_loss(conv_bbox_single_obj[:, :4], gt_bbox_single_obj[:, :4])
-                cls_loss += self.get_cls_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj
-        final_bbox_loss = self.bbox_loss_multi * bbox_loss / tf.cast(batch_size, tf.float32)
-        final_conf_loss = self.conf_loss_multi * conf_loss / tf.cast(batch_size, tf.float32)
-        final_cls_loss = self.cls_loss_multi * cls_loss / tf.cast(batch_size, tf.float32)
-        return final_bbox_loss, final_conf_loss, final_cls_loss
+        pred, true = data
+        true_box, true_obj, true_class = tf.split(true, (4, 1, -1), axis=-1)
+        pred_box, pred_obj, pred_class = tf.split(pred, (4, 1, -1), axis=-1)
+        num_classes = pred_class.shape[-1]
+        true_class = tf.squeeze(tf.one_hot(tf.cast(true_class, tf.int32), depth=num_classes, axis=-1), -2)
+        box_scale = 2 - 1.0 * true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
+        obj_mask = tf.squeeze(true_obj, -1)
+        conf_focal = tf.squeeze(tf.math.pow(true_obj - pred_obj, 2), -1)
+        iou = self.bbox_iou(pred_box, true_box, giou=True)
+        iou_loss = (1 - iou) * obj_mask * box_scale
+        conf_loss = conf_focal * self.loss_conf(true_obj, pred_obj)
+        class_loss = obj_mask * self.loss_cls(true_class, pred_class)
+        iou_loss = tf.reduce_mean(tf.reduce_sum(iou_loss, axis=[1, 2, 3]))
+        conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3]))
+        class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3])) * num_classes
+        return iou_loss, conf_loss, class_loss
 
-    def get_conf_loss(self, pred, gt):
-        pred_conf, gt_conf = tf.reshape(pred[:, 4], (-1, 1)), tf.reshape(gt[:, 4], (-1, 1))
-        conf_loss = self.loss_conf(gt_conf, pred_conf)
-        return conf_loss
-
-    def get_iou_loss(self, boxes1, boxes2):
-        '''Calculate giou loss; source: https://arxiv.org/abs/1902.09630
-            param boxes1: Tensor, shape=(anchor_num, 4), x1y1wh
-            param boxes2: Tensor, shape=(anchor_num, 4), x1y1wh
-        '''
-        boxes1 = tf.concat([boxes1[..., :2], boxes1[..., :2] + boxes1[..., 2:]], axis=-1)  #x1y1x2y2
-        boxes2 = tf.concat([boxes2[..., :2], boxes2[..., :2] + boxes2[..., 2:]], axis=-1)  #x1y1x2y2
-        boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
-        boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
-        left_up = tf.maximum(boxes1[..., :2], boxes2[..., :2])
-        right_down = tf.minimum(boxes1[..., 2:], boxes2[..., 2:])
-        inter_section = tf.maximum(right_down - left_up, 0.0)
-        inter_area = inter_section[..., 0] * inter_section[..., 1]
-        union_area = boxes1_area + boxes2_area - inter_area
-        iou = inter_area / union_area
-        enclose_left_up = tf.minimum(boxes1[..., :2], boxes2[..., :2])
-        enclose_right_down = tf.maximum(boxes1[..., 2:], boxes2[..., 2:])
-        enclose = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
-        enclose_area = enclose[..., 0] * enclose[..., 1]
-        giou = iou - 1.0 * (enclose_area - union_area) / enclose_area
-        return tf.reduce_mean(1 - giou)
-
-    def get_cls_loss(self, pred, gt):
-        cls_pred, cls_gt = pred[:, 5:], tf.cast(gt[:, 5], tf.int32)
-        cls_gt = tf.one_hot(cls_gt, cls_pred.shape[-1])
-        cls_pred, cls_gt = tf.reshape(cls_pred, (-1, 1)), tf.reshape(cls_gt, (-1, 1))
-        cls_loss = self.loss_cls(cls_gt, cls_pred)
-        return cls_loss
+    @staticmethod
+    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-9):
+        b1x1, b1x2, b1y1, b1y2 = bbox1[..., 0], bbox1[..., 0] + bbox1[..., 2], bbox1[..., 1], bbox1[..., 1] + bbox1[..., 3]
+        b2x1, b2x2, b2y1, b2y2  = bbox2[..., 0], bbox2[..., 0] + bbox2[..., 2], bbox2[..., 1], bbox2[..., 1] + bbox2[..., 3]
+        # intersection area
+        inter = (tf.minimum(b1x2, b2x2) - tf.maximum(b1x1, b2x1)) * (tf.minimum(b1y2, b2y2) - tf.maximum(b1y1, b2y1))
+        inter = tf.where(inter > 0, inter, tf.zeros_like(inter))
+        # union area
+        w1, h1 = b1x2 - b1x1 + epsilon, b1y2 - b1y1 + epsilon
+        w2, h2 = b2x2 - b2x1 + epsilon, b2y2 - b2y1 + epsilon
+        union = w1 * h1 + w2 * h2 - inter + epsilon
+        # iou
+        iou = inter / union
+        if giou or diou or ciou:
+            # enclosing box
+            cw = tf.maximum(b1x2, b2x2) - tf.minimum(b1x1, b2x1)
+            ch = tf.maximum(b1y2, b2y2) - tf.minimum(b1y1, b2y1)
+            if giou:
+                enclose_area = cw * ch + epsilon
+                giou = iou - 1.0 * (enclose_area - union) / enclose_area
+                return tf.clip_by_value(giou, -1, 1)
+            if diou or ciou:
+                c2 = cw**2 + ch**2 + epsilon
+                rho2 = ((b2x1 + b2x2) - (b1x1 + b1x2))**2 / 4 + ((b2y1 + b2y2) - (b1y1 + b1y2))**2 / 4
+                if diou:
+                    return iou - rho2 / c2
+                elif ciou:
+                    v = (4 / math.pi**2) * tf.pow(tf.atan(w2 / h2) - tf.atan(w1 / h1), 2)
+                    alpha = v / (1 - iou + v)
+                    return iou - (rho2 / c2 + v * alpha)
+        return tf.clip_by_value(iou, 0, 1)
 
 
 class CombineLoss(TensorOp):
@@ -406,12 +363,13 @@ class DecodePred(TensorOp):
         batch_size = conv_bbox.shape[0]
         grid, anchor = tf.expand_dims(grid, 0), tf.expand_dims(anchor, 0)
         grid, anchor = tf.tile(grid, [batch_size, 1, 1, 1, 1]), tf.tile(anchor, [batch_size, 1, 1, 1, 1])
+        conv_bbox = tf.sigmoid(conv_bbox)
         bbox_pred, conf_pred, cls_pred = conv_bbox[..., 0:4], conv_bbox[..., 4:5], conv_bbox[..., 5:]
         xcyc_pred, wh_pred = bbox_pred[..., 0:2], bbox_pred[..., 2:4]
-        xcyc_pred = tf.sigmoid(xcyc_pred) * stride + grid
-        wh_pred = tf.exp(wh_pred) * anchor
+        xcyc_pred = (xcyc_pred * 2 - 0.5) * stride + grid
+        wh_pred = (wh_pred * 2)**2 * anchor
         x1y1_pred = xcyc_pred - wh_pred / 2
-        result = tf.concat([x1y1_pred, wh_pred, tf.sigmoid(conf_pred), tf.sigmoid(cls_pred)], axis=-1)
+        result = tf.concat([x1y1_pred, wh_pred, conf_pred, cls_pred], axis=-1)
         return result
 
 
@@ -468,14 +426,14 @@ def lr_fn(step):
         lr = 0.001
     else:
         lr = 0.0001
-    return lr
+    return lr / 10
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
                   epochs=300,
-                  batch_size=64):
+                  batch_size=128):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
@@ -537,12 +495,12 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
             HSVAugment(inputs="image", outputs="image", mode="train"),
             ToArray(inputs="bbox", outputs="bbox", dtype="float32"),
             CategoryID2ClassID(inputs="bbox", outputs="bbox"),
-            GTBox(inputs="bbox", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), width=640, height=640),
+            GTBox(inputs="bbox", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), image_size=640),
             Delete(keys=("image1", "image2", "image3", "image4", "bbox1", "bbox2", "bbox3", "bbox4"), mode="train")
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
-                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.9))
+                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937))
     network = fe.Network(ops=[
         Rescale(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
