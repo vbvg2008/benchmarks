@@ -246,9 +246,9 @@ def yolov5(input_shape, num_classes, strides=(8, 16, 32)):
         biases.append(bias.flatten())
     out_17 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_17)
     out_17 = layers.Reshape((out_17.shape[1], out_17.shape[2], 3, num_classes + 5))(out_17)
-    out_20 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_20)
+    out_20 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[1]))(x_20)
     out_20 = layers.Reshape((out_20.shape[1], out_20.shape[2], 3, num_classes + 5))(out_20)
-    out_23 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_23)
+    out_23 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[2]))(x_23)
     out_23 = layers.Reshape((out_23.shape[1], out_23.shape[2], 3, num_classes + 5))(out_23)  # B, h/32, w/32, 3, 85
     return tf.keras.Model(inputs=inp, outputs=[out_17, out_20, out_23])
 
@@ -279,12 +279,12 @@ class ComputeLoss(TensorOp):
         return iou_loss, conf_loss, class_loss
 
     @staticmethod
-    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-9):
+    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-6):
         b1x1, b1x2, b1y1, b1y2 = bbox1[..., 0], bbox1[..., 0] + bbox1[..., 2], bbox1[..., 1], bbox1[..., 1] + bbox1[..., 3]
         b2x1, b2x2, b2y1, b2y2  = bbox2[..., 0], bbox2[..., 0] + bbox2[..., 2], bbox2[..., 1], bbox2[..., 1] + bbox2[..., 3]
         # intersection area
-        inter = (tf.minimum(b1x2, b2x2) - tf.maximum(b1x1, b2x1)) * (tf.minimum(b1y2, b2y2) - tf.maximum(b1y1, b2y1))
-        inter = tf.where(inter > 0, inter, tf.zeros_like(inter))
+        inter = tf.maximum(tf.minimum(b1x2, b2x2) - tf.maximum(b1x1, b2x1), 0) * tf.maximum(
+            tf.minimum(b1y2, b2y2) - tf.maximum(b1y1, b2y1), 0)
         # union area
         w1, h1 = b1x2 - b1x1 + epsilon, b1y2 - b1y1 + epsilon
         w2, h2 = b2x2 - b2x1 + epsilon, b2y2 - b2y1 + epsilon
@@ -309,11 +309,6 @@ class ComputeLoss(TensorOp):
                     alpha = v / (1 - iou + v)
                     return iou - (rho2 / c2 + v * alpha)
         return tf.clip_by_value(iou, 0, 1)
-
-
-class CombineLoss(TensorOp):
-    def forward(self, data, state):
-        return tf.reduce_sum(data)
 
 
 class Rescale(TensorOp):
@@ -426,14 +421,14 @@ def lr_fn(step):
         lr = 0.001
     else:
         lr = 0.0001
-    return lr / 10
+    return lr
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
                   epochs=300,
-                  batch_size=128):
+                  batch_size=64):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
@@ -511,7 +506,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         Average(inputs=("sbbox_loss", "mbbox_loss", "lbbox_loss"), outputs="bbox_loss"),
         Average(inputs=("sconf_loss", "mconf_loss", "lconf_loss"), outputs="conf_loss"),
         Average(inputs=("scls_loss", "mcls_loss", "lcls_loss"), outputs="cls_loss"),
-        CombineLoss(inputs=("bbox_loss", "conf_loss", "cls_loss"), outputs="total_loss"),
+        Average(inputs=("bbox_loss", "conf_loss", "cls_loss"), outputs="total_loss"),
         PredictBox(width=640, height=640, inputs=("pred_s", "pred_m", "pred_l"), outputs="box_pred", mode="eval"),
         UpdateOp(model=model, loss_name="total_loss")
     ])
