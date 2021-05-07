@@ -59,10 +59,9 @@ class CategoryID2ClassID(NumpyOp):
 
 
 class GTBox(NumpyOp):
-    def __init__(self, inputs, outputs, width, height, mode=None):
+    def __init__(self, inputs, outputs, image_size, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.width = width
-        self.height = height
+        self.image_size = image_size
         self.anchor_s = [(10, 13), (16, 30), (33, 23)]
         self.anchor_m = [(30, 61), (62, 45), (59, 119)]
         self.anchor_l = [(116, 90), (156, 198), (373, 326)]
@@ -70,83 +69,44 @@ class GTBox(NumpyOp):
     def forward(self, data, state):
         bbox = data[np.sum(data, 1) > 0]
         if bbox.size > 0:
-            ious_s, anchor_boxes_s, object_box_s, label = self._prepare_boxes(data, self.anchor_s, 80)
-            ious_m, anchor_boxes_m, object_box_m, _ = self._prepare_boxes(data, self.anchor_m, 40)
-            ious_l, anchor_boxes_l, object_box_l, _ = self._prepare_boxes(data, self.anchor_l, 20)
-            matched_s, matched_m, matched_l = self._match_boxes(ious_s, ious_m, ious_l)
-            gt_sbbox = self._generate_target(matched_s, object_box_s, anchor_boxes_s, feature_size=80, label=label)
-            gt_mbbox = self._generate_target(matched_m, object_box_m, anchor_boxes_m, feature_size=40, label=label)
-            gt_lbbox = self._generate_target(matched_l, object_box_l, anchor_boxes_l, feature_size=20, label=label)
+            gt_sbbox = self._generate_target(data, anchors=self.anchor_s, feature_size=80)
+            gt_mbbox = self._generate_target(data, anchors=self.anchor_m, feature_size=40)
+            gt_lbbox = self._generate_target(data, anchors=self.anchor_l, feature_size=20)
         else:
             gt_sbbox = np.zeros((80, 80, 3, 6), dtype="float32")
             gt_mbbox = np.zeros((40, 40, 3, 6), dtype="float32")
             gt_lbbox = np.zeros((20, 20, 3, 6), dtype="float32")
         return gt_sbbox, gt_mbbox, gt_lbbox
 
-    def _match_boxes(self, ious_s, ious_m, ious_l):
-        ious = np.concatenate([ious_s, ious_m, ious_l], axis=0)
-        matched = np.zeros_like(ious)
-        matched[ious > 0.3] = -1  # anything > 0.3 IOU is marked -1
-        matched[np.argmax(ious, 0), range(ious.shape[1])] = 1  # anchor box with highest IOU is marked 1
-        return matched[:3, :], matched[3:6, :], matched[6:, :]
-
-    @staticmethod
-    def img2feature(x, feature_size, image_size):
-        return x / image_size * feature_size
-
-    def get_anchor_boxes(self, object_box, anchors, feature_size):
-        anchor_boxes = []
-        xc = np.floor(self.img2feature(object_box[:, 0:1] + object_box[:, 2:3] / 2, feature_size, self.width)) + 0.5
-        yc = np.floor(self.img2feature(object_box[:, 1:2] + object_box[:, 3:4] / 2, feature_size, self.height)) + 0.5
-        for (anchor_w, anchor_h) in anchors:
-            anchor_w = self.img2feature(anchor_w, feature_size, self.width)
-            anchor_h = self.img2feature(anchor_h, feature_size, self.height)
-            x1 = xc - anchor_w / 2
-            y1 = yc - anchor_h / 2
-            anchor_box = np.concatenate([x1, y1, anchor_w * np.ones_like(x1), anchor_h * np.ones_like(x1)], axis=1)
-            anchor_boxes.append(anchor_box)
-        return anchor_boxes
-
-    def _prepare_boxes(self, bbox, anchors, feature_size):
-        object_box, label = bbox[:, :-1], bbox[:, -1]
-        anchor_boxes = self.get_anchor_boxes(object_box, anchors, feature_size)  #x1, y1, w, h
-        object_box = self.img2feature(object_box, feature_size, 640)  #x1, y1, w, h
-        ious = np.stack([np.diag(self._get_iou(object_box, anchor_box)) for anchor_box in anchor_boxes])
-        return ious, anchor_boxes, object_box, label
-
-    def _generate_target(self, matched, object_box, anchor_boxes, feature_size, label):
+    def _generate_target(self, bbox, anchors, feature_size, wh_threshold=4.0):
+        object_boxes, label = bbox[:, :-1], bbox[:, -1]
         gt_bbox = np.zeros((feature_size, feature_size, 3, 6), dtype="float32")
-        num_objects = object_box.shape[0]
-        for i in range(len(anchor_boxes)):
-            for j in range(num_objects):
-                anchor_xc_coord = int(anchor_boxes[i][j][0] + anchor_boxes[i][j][2] / 2)
-                anchor_yc_coord = int(anchor_boxes[i][j][1] + anchor_boxes[i][j][3] / 2)
-                if matched[i, j] == 1:
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord,
-                            i][0:2] = (object_box[j][0:2] + object_box[j][2:4] / 2) % 1  # center offset w.r.t grid
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord,
-                            i][2:4] = np.log(object_box[j][2:4] / anchor_boxes[i][j][2:4])
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = 1.0
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][5] = label[j]
-                elif matched[i, j] == -1:
-                    gt_bbox[anchor_yc_coord, anchor_xc_coord, i][4] = -1.0  # ignore these boxes later
+        for object_idx, object_box in enumerate(object_boxes):
+            for anchor_idx, anchor in enumerate(anchors):
+                ratio = object_box[2:] / np.array(anchor, dtype="float32")
+                match = np.max(np.maximum(ratio, 1 / ratio)) < wh_threshold
+                if match:
+                    center_feature_map = (object_box[:2] + object_box[2:] / 2) / self.image_size * feature_size
+                    candidate_coords = self._get_candidate_coords(center_feature_map, feature_size)
+                    for xc, yc in candidate_coords:
+                        gt_bbox[yc, xc, anchor_idx][:4] = object_box  # use absoulte x1,y1,w,h
+                        gt_bbox[yc, xc, anchor_idx][4] = 1.0
+                        gt_bbox[yc, xc, anchor_idx][5] = label[object_idx]
         return gt_bbox
 
     @staticmethod
-    def _get_iou(boxes1, boxes2):
-        x11, y11, w1, h1 = np.split(boxes1, 4, axis=1)
-        x21, y21, w2, h2 = np.split(boxes2, 4, axis=1)
-        x12, y12 = x11 + w1, y11 + h1
-        x22, y22 = x21 + w2, y21 + h2
-        xmin = np.maximum(x11, np.transpose(x21))
-        ymin = np.maximum(y11, np.transpose(y21))
-        xmax = np.minimum(x12, np.transpose(x22))
-        ymax = np.minimum(y12, np.transpose(y22))
-        inter_area = np.maximum((xmax - xmin + 1), 0) * np.maximum((ymax - ymin + 1), 0)
-        area1 = (w1 + 1) * (h1 + 1)
-        area2 = (w2 + 1) * (h2 + 1)
-        iou = inter_area / (area1 + area2.T - inter_area)
-        return iou
+    def _get_candidate_coords(center_feature_map, feature_size):
+        xc, yc = center_feature_map
+        candidate_coords = [(int(xc), int(yc))]
+        if xc % 1 < 0.5 and xc > 1:
+            candidate_coords.append((int(xc) - 1, int(yc)))
+        if xc % 1 >= 0.5 and xc < feature_size - 1:
+            candidate_coords.append((int(xc) + 1, int(yc)))
+        if yc % 1 < 0.5 and yc > 1:
+            candidate_coords.append((int(xc), int(yc) - 1))
+        if yc % 1 >= 0.5 and yc < feature_size - 1:
+            candidate_coords.append((int(xc), int(yc) + 1))
+        return candidate_coords
 
 
 def conv_block(x, c, k=1, s=1):
@@ -218,65 +178,68 @@ def yolov5(input_shape, num_classes, strides=(8, 16, 32)):
         biases.append(bias.flatten())
     out_17 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_17)
     out_17 = layers.Reshape((out_17.shape[1], out_17.shape[2], 3, num_classes + 5))(out_17)
-    out_20 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_20)
+    out_20 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[1]))(x_20)
     out_20 = layers.Reshape((out_20.shape[1], out_20.shape[2], 3, num_classes + 5))(out_20)
-    out_23 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_23)
+    out_23 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[2]))(x_23)
     out_23 = layers.Reshape((out_23.shape[1], out_23.shape[2], 3, num_classes + 5))(out_23)  # B, h/32, w/32, 3, 85
     return tf.keras.Model(inputs=inp, outputs=[out_17, out_20, out_23])
 
 
 class ComputeLoss(TensorOp):
-    def __init__(self, inputs, outputs, mode=None):
+    def __init__(self, inputs, outputs, img_size=640, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.loss_conf = tf.losses.BinaryCrossentropy(from_logits=True, reduction='sum')
-        self.loss_bbox = tf.losses.MeanSquaredError(reduction='sum')
-        self.loss_cls = tf.losses.BinaryCrossentropy(from_logits=True, reduction='sum')
-        self.bbox_loss_multi = 10
-        self.conf_loss_multi = 0.05
-        self.cls_loss_multi = 1.0
+        self.loss_conf = tf.losses.BinaryCrossentropy(reduction="none")
+        self.loss_cls = tf.losses.BinaryCrossentropy(reduction="none")
+        self.img_size = img_size
 
     def forward(self, data, state):
-        conv_bbox, gt_bbox = data
-        batch_size = gt_bbox.shape[0]
-        bbox_loss, conf_loss, cls_loss = tf.zeros(()), tf.zeros(()), tf.zeros(())
-        for idx in range(batch_size):
-            conv_bbox_single, gt_bbox_single = conv_bbox[idx], gt_bbox[idx]
-            consider_conf = gt_bbox_single[:, :, :, 4] > -1.0
-            has_obj = gt_bbox_single[:, :, :, 4] == 1.0
-            conf_loss += self.get_conf_loss(conv_bbox_single[consider_conf], gt_bbox_single[consider_conf])
-            conv_bbox_single_obj, gt_bbox_single_obj = conv_bbox_single[has_obj], gt_bbox_single[has_obj]
-            num_obj = tf.cast(tf.shape(conv_bbox_single_obj)[0], tf.float32)
-            if num_obj > 0:
-                bbox_loss += self.get_bbox_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj
-                cls_loss += self.get_cls_loss(conv_bbox_single_obj, gt_bbox_single_obj) / num_obj
-        final_bbox_loss = self.bbox_loss_multi * bbox_loss / tf.cast(batch_size, tf.float32)
-        final_conf_loss = self.conf_loss_multi * conf_loss / tf.cast(batch_size, tf.float32)
-        final_cls_loss = self.cls_loss_multi * cls_loss / tf.cast(batch_size, tf.float32)
-        return final_bbox_loss, final_conf_loss, final_cls_loss
+        pred, true = data
+        true_box, true_obj, true_class = tf.split(true, (4, 1, -1), axis=-1)
+        pred_box, pred_obj, pred_class = tf.split(pred, (4, 1, -1), axis=-1)
+        num_classes = pred_class.shape[-1]
+        true_class = tf.squeeze(tf.one_hot(tf.cast(true_class, tf.int32), depth=num_classes, axis=-1), -2)
+        box_scale = 2 - 1.0 * true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
+        obj_mask = tf.squeeze(true_obj, -1)
+        conf_focal = tf.squeeze(tf.math.pow(true_obj - pred_obj, 2), -1)
+        iou = self.bbox_iou(pred_box, true_box, giou=True)
+        iou_loss = (1 - iou) * obj_mask * box_scale
+        conf_loss = conf_focal * self.loss_conf(true_obj, pred_obj)
+        class_loss = obj_mask * self.loss_cls(true_class, pred_class)
+        iou_loss = tf.reduce_mean(tf.reduce_sum(iou_loss, axis=[1, 2, 3]))
+        conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3]))
+        class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3])) * num_classes
+        return iou_loss, conf_loss, class_loss
 
-    def get_conf_loss(self, pred, gt):
-        pred_conf, gt_conf = tf.reshape(pred[:, 4], (-1, 1)), tf.reshape(gt[:, 4], (-1, 1))
-        conf_loss = self.loss_conf(gt_conf, pred_conf)
-        return conf_loss
-
-    def get_bbox_loss(self, pred, gt):
-        xy_pred, xy_gt = tf.sigmoid(pred[:, 0:2]), gt[:, 0:2]
-        wh_pred, wh_gt = pred[:, 2:4], gt[:, 2:4]
-        bbox_loss_xy = self.loss_bbox(xy_gt, xy_pred)
-        bbox_loss_wh = self.loss_bbox(wh_gt, wh_pred)
-        return bbox_loss_xy + bbox_loss_wh / 100
-
-    def get_cls_loss(self, pred, gt):
-        cls_pred, cls_gt = pred[:, 5:], tf.cast(gt[:, 5], tf.int32)
-        cls_gt = tf.one_hot(cls_gt, cls_pred.shape[-1])
-        cls_pred, cls_gt = tf.reshape(cls_pred, (-1, 1)), tf.reshape(cls_gt, (-1, 1))
-        cls_loss = self.loss_cls(cls_gt, cls_pred)
-        return cls_loss
-
-
-class CombineLoss(TensorOp):
-    def forward(self, data, state):
-        return tf.reduce_sum(data)
+    @staticmethod
+    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-7):
+        b1x1, b1x2, b1y1, b1y2 = bbox1[..., 0], bbox1[..., 0] + bbox1[..., 2], bbox1[..., 1], bbox1[..., 1] + bbox1[..., 3]
+        b2x1, b2x2, b2y1, b2y2  = bbox2[..., 0], bbox2[..., 0] + bbox2[..., 2], bbox2[..., 1], bbox2[..., 1] + bbox2[..., 3]
+        # intersection area
+        inter = tf.maximum(tf.minimum(b1x2, b2x2) - tf.maximum(b1x1, b2x1), 0) * tf.maximum(
+            tf.minimum(b1y2, b2y2) - tf.maximum(b1y1, b2y1), 0)
+        # union area
+        w1, h1 = b1x2 - b1x1 + epsilon, b1y2 - b1y1 + epsilon
+        w2, h2 = b2x2 - b2x1 + epsilon, b2y2 - b2y1 + epsilon
+        union = w1 * h1 + w2 * h2 - inter + epsilon
+        # iou
+        iou = inter / union
+        if giou or diou or ciou:
+            # enclosing box
+            cw = tf.maximum(b1x2, b2x2) - tf.minimum(b1x1, b2x1)
+            ch = tf.maximum(b1y2, b2y2) - tf.minimum(b1y1, b2y1)
+            if giou:
+                enclose_area = cw * ch + epsilon
+                return iou - (enclose_area - union) / enclose_area
+            if diou or ciou:
+                c2 = cw**2 + ch**2 + epsilon
+                rho2 = ((b2x1 + b2x2) - (b1x1 + b1x2))**2 / 4 + ((b2y1 + b2y2) - (b1y1 + b1y2))**2 / 4
+                if diou:
+                    return iou - rho2 / c2
+                elif ciou:
+                    v = (4 / math.pi**2) * tf.pow(tf.atan(w2 / h2) - tf.atan(w1 / h1), 2)
+                    alpha = v / (1 - iou + v)
+                    return iou - (rho2 / c2 + v * alpha)
+        return tf.clip_by_value(iou, 0, 1)
 
 
 class Rescale(TensorOp):
@@ -284,29 +247,28 @@ class Rescale(TensorOp):
         return data / 255
 
 
-class PredictBox(TensorOp):
-    def __init__(self,
-                 inputs,
-                 outputs,
-                 mode,
-                 width,
-                 height,
-                 select_top_k=1000,
-                 nms_max_outputs=100,
-                 score_threshold=0.05):
+class DecodePred(TensorOp):
+    def __init__(self, inputs, outputs, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.width = width
-        self.height = height
-        self.select_top_k = select_top_k
-        self.nms_max_outputs = nms_max_outputs
-        self.score_threshold = score_threshold
         self.strides = [8, 16, 32]
         self.num_anchor = 3
+        self.width, self.height = 640, 640
         self.grids = self.create_grid(self.strides, self.num_anchor)
         anchor_s = [(10, 13), (16, 30), (33, 23)]
         anchor_m = [(30, 61), (62, 45), (59, 119)]
         anchor_l = [(116, 90), (156, 198), (373, 326)]
         self.anchors = self.create_anchor(anchor_s, anchor_m, anchor_l, self.strides)
+
+    def create_grid(self, strides, num_anchor):
+        grids = []
+        for stride in strides:
+            x_coor = [stride * i for i in range(self.width // stride)]
+            y_coor = [stride * i for i in range(self.height // stride)]
+            xx, yy = np.meshgrid(x_coor, y_coor)
+            xx, yy = np.float32(xx), np.float32(yy)
+            xx, yy = np.stack([xx] * num_anchor, axis=-1), np.stack([yy] * num_anchor, axis=-1)
+            grids.append(tf.convert_to_tensor(np.stack([xx, yy], axis=-1)))
+        return grids
 
     def create_anchor(self, anchor_s, anchor_m, anchor_l, strides):
         anchors = []
@@ -317,47 +279,53 @@ class PredictBox(TensorOp):
             anchors.append(tf.convert_to_tensor(anchor))
         return anchors
 
-    def create_grid(self, strides, num_anchor):
-        grids = []
-        for stride in strides:
-            x_coor = [stride * i for i in range(self.width // stride)]
-            y_coor = [stride * i for i in range(self.height // stride)]
-            xx, yy = np.meshgrid(x_coor, y_coor)
-            xx, yy = np.float32(xx), np.float32(yy)
-            xx, yy = np.stack([xx] * num_anchor, axis=-1), np.stack([yy] * num_anchor, axis=-1)
-            grids.append((xx, yy))
-        return grids
+    def forward(self, data, state):
+        conv_sbbox = self.decode(data[0], self.grids[0], self.anchors[0], self.strides[0])
+        conv_mbbox = self.decode(data[1], self.grids[1], self.anchors[1], self.strides[1])
+        conv_lbbox = self.decode(data[2], self.grids[2], self.anchors[2], self.strides[2])
+        return conv_sbbox, conv_mbbox, conv_lbbox
+
+    def decode(self, conv_bbox, grid, anchor, stride):
+        batch_size = conv_bbox.shape[0]
+        grid, anchor = tf.expand_dims(grid, 0), tf.expand_dims(anchor, 0)
+        grid, anchor = tf.tile(grid, [batch_size, 1, 1, 1, 1]), tf.tile(anchor, [batch_size, 1, 1, 1, 1])
+        conv_bbox = tf.sigmoid(conv_bbox)
+        bbox_pred, conf_pred, cls_pred = conv_bbox[..., 0:4], conv_bbox[..., 4:5], conv_bbox[..., 5:]
+        xcyc_pred, wh_pred = bbox_pred[..., 0:2], bbox_pred[..., 2:4]
+        xcyc_pred = (xcyc_pred * 2 - 0.5) * stride + grid
+        wh_pred = (wh_pred * 2)**2 * anchor
+        x1y1_pred = xcyc_pred - wh_pred / 2
+        result = tf.concat([x1y1_pred, wh_pred, conf_pred, cls_pred], axis=-1)
+        return result
+
+
+class PredictBox(TensorOp):
+    def __init__(self, inputs, outputs, mode, width, height, nms_max_outputs=100, score_threshold=0.25):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.width = width
+        self.height = height
+        self.nms_max_outputs = nms_max_outputs
+        self.score_threshold = score_threshold
 
     def forward(self, data, state):
         conv_sbbox, conv_mbbox, conv_lbbox = data
         batch_size = conv_sbbox.shape[0]
         final_results = []
         for idx in range(batch_size):
-            conv_bboxes = [conv_sbbox[idx], conv_mbbox[idx], conv_lbbox[idx]]
-            selected_bboxes = []
-            for conv_bbox, (xx, yy), stride, anchor in zip(conv_bboxes, self.grids, self.strides, self.anchors):
-                # convert prediction to absolute scale
-                width_abs = tf.exp(conv_bbox[:, :, :, 2]) * anchor[:, :, :, 0]
-                height_abs = tf.exp(conv_bbox[:, :, :, 3]) * anchor[:, :, :, 1]
-                x1_abs = tf.sigmoid(conv_bbox[:, :, :, 0]) * stride + xx - width_abs / 2
-                y1_abs = tf.sigmoid(conv_bbox[:, :, :, 1]) * stride + yy - height_abs / 2
-                x2_abs = x1_abs + width_abs
-                y2_abs = y1_abs + height_abs
-                obj_score = tf.sigmoid(conv_bbox[:, :, :, 4])
-                label = tf.cast(tf.argmax(conv_bbox[:, :, :, 5:], axis=-1), tf.float32)
-                label_score = tf.reduce_max(tf.sigmoid(conv_bbox[:, :, :, 5:]), axis=-1)
-                all_conv_bboxes = tf.stack([y1_abs, x1_abs, y2_abs, x2_abs, obj_score, label, label_score], axis=-1)
-                all_conv_bboxes = tf.reshape(all_conv_bboxes, (-1, 7))
-                # select the top 1k bboxes
-                selected_idx = tf.math.top_k(all_conv_bboxes[:, 4],
-                                             tf.minimum(self.select_top_k, tf.shape(all_conv_bboxes)[0])).indices
-                selected_bboxes.append(tf.gather(all_conv_bboxes, selected_idx))
-            selected_bboxes = tf.concat(selected_bboxes, axis=0)
+            pred_s, pred_m, pred_l = conv_sbbox[idx], conv_mbbox[idx], conv_lbbox[idx]
+            pred_s, pred_m, pred_l = tf.reshape(pred_s, (-1, 85)), tf.reshape(pred_m, (-1, 85)), tf.reshape(pred_l, (-1, 85))
+            preds = tf.concat([pred_s, pred_m, pred_l], axis=0)
+            x1, y1, w, h, obj_score = preds[:, 0], preds[:, 1], preds[:, 2], preds[:, 3], preds[:, 4]
+            x2, y2 = x1 + w, y1 + h
+            label = tf.cast(tf.argmax(preds[:, 5:], axis=-1), tf.float32)
+            label_score = tf.reduce_max(preds[:, 5:], axis=-1)
+            selected_bboxes = tf.stack([y1, x1, y2, x2, obj_score, label, label_score], axis=-1)
             # nms
             nms_keep = tf.image.non_max_suppression(selected_bboxes[:, :4],
                                                     selected_bboxes[:, 4],
                                                     self.nms_max_outputs,
-                                                    score_threshold=self.score_threshold)
+                                                    score_threshold=self.score_threshold,
+                                                    iou_threshold=0.6)
             selected_bboxes = tf.gather(selected_bboxes, nms_keep)
             # clip bounding boxes to image size
             y1_abs = tf.clip_by_value(selected_bboxes[:, 0], 0, self.height)
@@ -377,14 +345,14 @@ class PredictBox(TensorOp):
 
 def lr_fn(step):
     if step < 2000:
-        lr = (0.1 - 0.002) / 2000 * step + 0.002
+        lr = (0.01 - 0.0002) / 2000 * step + 0.0002
     elif step < 1833 * 200:
-        lr = 0.1
-    elif step < 1833 * 250:
         lr = 0.01
-    else:
+    elif step < 1833 * 250:
         lr = 0.001
-    return lr
+    else:
+        lr = 0.0001
+    return lr / 10
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
@@ -416,23 +384,23 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
             HSVAugment(inputs="image", outputs="image", mode="train"),
             ToArray(inputs="bbox", outputs="bbox", dtype="float32"),
             CategoryID2ClassID(inputs="bbox", outputs="bbox"),
-            GTBox(inputs="bbox", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), width=640, height=640),
+            GTBox(inputs="bbox", outputs=("gt_sbbox", "gt_mbbox", "gt_lbbox"), image_size=640)
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
-                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.9))
+                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937))
     network = fe.Network(ops=[
         Rescale(inputs="image", outputs="image"),
-        ModelOp(model=model, inputs="image", outputs=("conv_sbbox", "conv_mbbox", "conv_lbbox")),
-        ComputeLoss(inputs=("conv_sbbox", "gt_sbbox"), outputs=("sbbox_loss", "sconf_loss", "scls_loss")),
-        ComputeLoss(inputs=("conv_mbbox", "gt_mbbox"), outputs=("mbbox_loss", "mconf_loss", "mcls_loss")),
-        ComputeLoss(inputs=("conv_lbbox", "gt_lbbox"), outputs=("lbbox_loss", "lconf_loss", "lcls_loss")),
+        ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
+        DecodePred(inputs=("pred_s", "pred_m", "pred_l"), outputs=("pred_s", "pred_m", "pred_l")),
+        ComputeLoss(inputs=("pred_s", "gt_sbbox"), outputs=("sbbox_loss", "sconf_loss", "scls_loss")),
+        ComputeLoss(inputs=("pred_m", "gt_mbbox"), outputs=("mbbox_loss", "mconf_loss", "mcls_loss")),
+        ComputeLoss(inputs=("pred_l", "gt_lbbox"), outputs=("lbbox_loss", "lconf_loss", "lcls_loss")),
         Average(inputs=("sbbox_loss", "mbbox_loss", "lbbox_loss"), outputs="bbox_loss"),
         Average(inputs=("sconf_loss", "mconf_loss", "lconf_loss"), outputs="conf_loss"),
         Average(inputs=("scls_loss", "mcls_loss", "lcls_loss"), outputs="cls_loss"),
-        CombineLoss(inputs=("bbox_loss", "conf_loss", "cls_loss"), outputs="total_loss"),
-        PredictBox(
-            width=640, height=640, inputs=("conv_sbbox", "conv_mbbox", "conv_lbbox"), outputs="box_pred", mode="eval"),
+        Average(inputs=("bbox_loss", "conf_loss", "cls_loss"), outputs="total_loss"),
+        PredictBox(width=640, height=640, inputs=("pred_s", "pred_m", "pred_l"), outputs="box_pred", mode="eval"),
         UpdateOp(model=model, loss_name="total_loss")
     ])
     traces = [

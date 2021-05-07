@@ -15,7 +15,6 @@ from fastestimator.op.numpyop.multivariate import CenterCrop, HorizontalFlip, Lo
 from fastestimator.op.numpyop.univariate import ReadImage, ToArray
 from fastestimator.op.tensorop import Average, TensorOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
-from fastestimator.schedule import EpochScheduler, cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
@@ -279,7 +278,7 @@ class ComputeLoss(TensorOp):
         return iou_loss, conf_loss, class_loss
 
     @staticmethod
-    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-6):
+    def bbox_iou(bbox1, bbox2, giou=False, diou=False, ciou=False, epsilon=1e-7):
         b1x1, b1x2, b1y1, b1y2 = bbox1[..., 0], bbox1[..., 0] + bbox1[..., 2], bbox1[..., 1], bbox1[..., 1] + bbox1[..., 3]
         b2x1, b2x2, b2y1, b2y2  = bbox2[..., 0], bbox2[..., 0] + bbox2[..., 2], bbox2[..., 1], bbox2[..., 1] + bbox2[..., 3]
         # intersection area
@@ -297,8 +296,7 @@ class ComputeLoss(TensorOp):
             ch = tf.maximum(b1y2, b2y2) - tf.minimum(b1y1, b2y1)
             if giou:
                 enclose_area = cw * ch + epsilon
-                giou = iou - 1.0 * (enclose_area - union) / enclose_area
-                return tf.clip_by_value(giou, -1, 1)
+                return iou - (enclose_area - union) / enclose_area
             if diou or ciou:
                 c2 = cw**2 + ch**2 + epsilon
                 rho2 = ((b2x1 + b2x2) - (b1x1 + b1x2))**2 / 4 + ((b2y1 + b2y2) - (b1y1 + b1y2))**2 / 4
@@ -421,7 +419,7 @@ def lr_fn(step):
         lr = 0.001
     else:
         lr = 0.0001
-    return lr
+    return lr / 10
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
