@@ -358,6 +358,12 @@ def lr_fn(step):
     return lr / 10
 
 
+class GetWidthHeight(NumpyOp):
+    def forward(self, data, state):
+        height, width = data.shape
+        return width, height
+
+
 class COCOMap(fe.trace.Trace):
     def on_epoch_begin(self, data):
         self.coco_gt = COCO("/data/data/MSCOCO2017/annotations/instances_val2017.json")
@@ -391,6 +397,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         batch_size=batch_size,
         ops=[
             ReadImage(inputs="image", outputs="image"),
+            # GetWidthHeight(inputs="image", outputs=("width", "height")),
             LongestMaxSize(max_size=640, image_in="image", bbox_in="bbox", bbox_params=BboxParams("coco",
                                                                                                   min_area=1.0)),
             PadIfNeeded(min_height=640,
@@ -431,7 +438,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         LRScheduler(model=model, lr_fn=lr_fn),
         BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
         MeanAveragePrecision(num_classes=80, true_key='bbox', pred_key='box_pred', mode="eval"),
-        COCOMap(inputs=('image_id', 'box_pred'), mode='eval'),
+        COCOMap(inputs=('image_id', 'box_pred', 'width', 'height'), mode='eval'),
         RestoreWizard(directory=restore_dir)
     ]
     estimator = fe.Estimator(pipeline=pipeline,
