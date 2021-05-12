@@ -198,16 +198,15 @@ class ComputeLoss(TensorOp):
         pred_box, pred_obj, pred_class = tf.split(pred, (4, 1, -1), axis=-1)
         num_classes = pred_class.shape[-1]
         true_class = tf.squeeze(tf.one_hot(tf.cast(true_class, tf.int32), depth=num_classes, axis=-1), -2)
-        box_scale = 2 - 1.0 * true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
+        box_scale = 2 - true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
         obj_mask = tf.squeeze(true_obj, -1)
-        conf_focal = tf.squeeze(tf.math.pow(true_obj - pred_obj, 2), -1)
         iou = self.bbox_iou(pred_box, true_box, giou=True)
         iou_loss = (1 - iou) * obj_mask * box_scale
-        conf_loss = conf_focal * self.loss_conf(true_obj, pred_obj)
+        conf_loss = self.loss_conf(true_obj, pred_obj)
         class_loss = obj_mask * self.loss_cls(true_class, pred_class)
         iou_loss = tf.reduce_mean(tf.reduce_sum(iou_loss, axis=[1, 2, 3]))
         conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3]))
-        class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3])) * num_classes
+        class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3]))
         return iou_loss, conf_loss, class_loss
 
     @staticmethod
