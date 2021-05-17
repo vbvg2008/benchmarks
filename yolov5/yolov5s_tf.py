@@ -4,10 +4,15 @@ import random
 import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from albumentations import BboxParams
+from tensorflow.keras import layers
+from tensorflow.keras.initializers import Constant
+from tensorflow_addons.optimizers import SGDW
+from torch.utils.data import Dataset
+
+import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -15,12 +20,10 @@ from fastestimator.op.numpyop.multivariate import CenterCrop, HorizontalFlip, Lo
 from fastestimator.op.numpyop.univariate import ReadImage, ToArray
 from fastestimator.op.tensorop import Average, TensorOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.schedule import EpochScheduler, cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
-from tensorflow.keras import layers
-from tensorflow.keras.initializers import Constant
-from torch.utils.data import Dataset
 
 
 # This dataset selects 4 images and its bboxes
@@ -418,15 +421,11 @@ class PredictBox(TensorOp):
         return final_results
 
 
-def lr_fn(step):
-    if step < 2000:
-        lr = (0.01 - 0.0002) / 2000 * step + 0.0002
-    elif step < 1833 * 200:
-        lr = 0.01
-    elif step < 1833 * 250:
-        lr = 0.001
+def lr_schedule_warmup(step):
+    if step < 5499:
+        lr = 0.01 / 5499 * step
     else:
-        lr = 0.0001
+        lr = 0.01
     return lr
 
 
@@ -501,7 +500,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
-                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937))
+                     optimizer_fn=lambda: SGDW(momentum=0.937, weight_decay=0.0005, nesterov=True))
     network = fe.Network(ops=[
         Rescale(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
@@ -517,11 +516,19 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         UpdateOp(model=model, loss_name="total_loss")
     ])
     traces = [
-        LRScheduler(model=model, lr_fn=lr_fn),
-        BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
         MeanAveragePrecision(num_classes=80, true_key='bbox', pred_key='box_pred', mode="eval"),
+        BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
         RestoreWizard(directory=restore_dir)
     ]
+    lr_schedule = {
+        1:
+        LRScheduler(model=model, lr_fn=lr_schedule_warmup),
+        4:
+        LRScheduler(
+            model=model,
+            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1e-2, min_lr=1e-4, start=4))
+    }
+    traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,

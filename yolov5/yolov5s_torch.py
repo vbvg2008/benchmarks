@@ -4,12 +4,14 @@ import random
 import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
 from albumentations import BboxParams
+from torch.utils.data import Dataset
+
+import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -21,7 +23,6 @@ from fastestimator.schedule import EpochScheduler, cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
-from torch.utils.data import Dataset
 
 
 # This dataset selects 4 images and its bboxes
@@ -635,8 +636,8 @@ def non_max_suppression(prediction,
 
 
 def lr_schedule_warmup(step):
-    if step < 5496:
-        lr = 0.01 / 5496 * step
+    if step < 5499:
+        lr = 0.01 / 5499 * step
     else:
         lr = 0.01
     return lr
@@ -730,8 +731,9 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         1:
         LRScheduler(model=model, lr_fn=lr_schedule_warmup),
         4:
-        LRScheduler(model=model,
-                    lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1.0, min_lr=0.2, start=4))
+        LRScheduler(
+            model=model,
+            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1e-2, min_lr=1e-4, start=4))
     }
     traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline, network=network, traces=traces, epochs=epochs)
