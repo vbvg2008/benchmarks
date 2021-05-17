@@ -3,15 +3,10 @@ import pdb
 import tempfile
 
 import cv2
+import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from albumentations import BboxParams
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from tensorflow.keras import layers
-from tensorflow.keras.initializers import Constant
-
-import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -22,6 +17,8 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
+from tensorflow.keras import layers
+from tensorflow.keras.initializers import Constant
 
 
 class HSVAugment(NumpyOp):
@@ -201,7 +198,7 @@ class ComputeLoss(TensorOp):
         pred_box, pred_obj, pred_class = tf.split(pred, (4, 1, -1), axis=-1)
         num_classes = pred_class.shape[-1]
         true_class = tf.squeeze(tf.one_hot(tf.cast(true_class, tf.int32), depth=num_classes, axis=-1), -2)
-        box_scale = 2 - true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
+        box_scale = 2 - 1.0 * true_box[..., 2] * true_box[..., 3] / (self.img_size**2)
         obj_mask = tf.squeeze(true_obj, -1)
         conf_focal = tf.squeeze(tf.math.pow(true_obj - pred_obj, 2), -1)
         iou = self.bbox_iou(pred_box, true_box, giou=True)
@@ -303,12 +300,12 @@ class DecodePred(TensorOp):
 
 
 class PredictBox(TensorOp):
-    def __init__(self, inputs, outputs, mode, width, height, nms_max_outputs=100, score_threshold=0.25):
+    def __init__(self, inputs, outputs, mode, width, height, max_outputs=500, conf_threshold=0.4):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.width = width
         self.height = height
-        self.nms_max_outputs = nms_max_outputs
-        self.score_threshold = score_threshold
+        self.max_outputs = max_outputs
+        self.conf_threshold = conf_threshold
 
     def forward(self, data, state):
         conv_sbbox, conv_mbbox, conv_lbbox = data
@@ -318,29 +315,37 @@ class PredictBox(TensorOp):
             pred_s, pred_m, pred_l = conv_sbbox[idx], conv_mbbox[idx], conv_lbbox[idx]
             pred_s, pred_m, pred_l = tf.reshape(pred_s, (-1, 85)), tf.reshape(pred_m, (-1, 85)), tf.reshape(pred_l, (-1, 85))
             preds = tf.concat([pred_s, pred_m, pred_l], axis=0)
-            x1, y1, w, h, obj_score = preds[:, 0], preds[:, 1], preds[:, 2], preds[:, 3], preds[:, 4]
-            x2, y2 = x1 + w, y1 + h
-            label = tf.cast(tf.argmax(preds[:, 5:], axis=-1), tf.float32)
-            label_score = tf.reduce_max(preds[:, 5:], axis=-1)
-            selected_bboxes = tf.stack([y1, x1, y2, x2, obj_score, label, label_score], axis=-1)
-            # nms
-            nms_keep = tf.image.non_max_suppression(selected_bboxes[:, :4],
-                                                    selected_bboxes[:, 4],
-                                                    self.nms_max_outputs,
-                                                    score_threshold=self.score_threshold,
-                                                    iou_threshold=0.6)
-            selected_bboxes = tf.gather(selected_bboxes, nms_keep)
+            preds = preds[preds[:, 4] > self.conf_threshold]  # filter by confidence
+            classes = tf.argmax(preds[:, 5:], axis=-1)
+            unique_classes = tf.unique(classes)[0]
+            selected_boxes_all_classes = tf.zeros(shape=[0, 6], dtype=tf.float32)
+            for clss in unique_classes:
+                tf.autograph.experimental.set_loop_options(shape_invariants=[(selected_boxes_all_classes,
+                                                                              tf.TensorShape([None, 6]))])
+                mask = tf.math.equal(classes, clss)
+                preds_cls = tf.boolean_mask(preds, mask)
+                x1, y1, w, h = preds_cls[:, 0], preds_cls[:, 1], preds_cls[:, 2], preds_cls[:, 3]
+                x2, y2 = x1 + w, y1 + h
+                conf_score, label = preds_cls[:, 4], tf.boolean_mask(classes, mask)
+                selected_bboxes = tf.stack([y1, x1, y2, x2, conf_score, tf.cast(label, tf.float32)], axis=-1)
+                # nms for every class
+                nms_keep = tf.image.non_max_suppression(selected_bboxes[:, :4],
+                                                        selected_bboxes[:, 4],
+                                                        max_output_size=50,
+                                                        iou_threshold=0.35)
+                selected_bboxes = tf.gather(selected_bboxes, nms_keep)
+                selected_boxes_all_classes = tf.concat([selected_boxes_all_classes, selected_bboxes], axis=0)
             # clip bounding boxes to image size
-            y1_abs = tf.clip_by_value(selected_bboxes[:, 0], 0, self.height)
-            x1_abs = tf.clip_by_value(selected_bboxes[:, 1], 0, self.width)
-            height_abs = tf.clip_by_value(selected_bboxes[:, 2] - y1_abs, 0, self.height - y1_abs)
-            width_abs = tf.clip_by_value(selected_bboxes[:, 3] - x1_abs, 0, self.width - x1_abs)
-            labels, labels_score = selected_bboxes[:, 5], selected_bboxes[:, 6]
+            y1_abs = tf.clip_by_value(selected_boxes_all_classes[:, 0], 0, self.height)
+            x1_abs = tf.clip_by_value(selected_boxes_all_classes[:, 1], 0, self.width)
+            height_abs = tf.clip_by_value(selected_boxes_all_classes[:, 2] - y1_abs, 0, self.height - y1_abs)
+            width_abs = tf.clip_by_value(selected_boxes_all_classes[:, 3] - x1_abs, 0, self.width - x1_abs)
+            labels_score, labels = selected_boxes_all_classes[:, 4], selected_boxes_all_classes[:, 5]
             # final output: [x1, y1, w, h, label, label_score, select_or_not]
             results_single = [x1_abs, y1_abs, width_abs, height_abs, labels, labels_score, tf.ones_like(x1_abs)]
             results_single = tf.stack(results_single, axis=-1)
             # pad 0 to other rows to improve performance
-            results_single = tf.pad(results_single, [(0, self.nms_max_outputs - tf.shape(results_single)[0]), (0, 0)])
+            results_single = tf.pad(results_single, [(0, self.max_outputs - tf.shape(results_single)[0]), (0, 0)])
             final_results.append(results_single)
         final_results = tf.stack(final_results)
         return final_results
@@ -356,27 +361,6 @@ def lr_fn(step):
     else:
         lr = 0.0001
     return lr / 10
-
-
-class COCOMap(fe.trace.Trace):
-    def on_epoch_begin(self, data):
-        self.coco_gt = COCO("/data/data/MSCOCO2017/annotations/instances_val2017.json")
-        self.results_file = "results_{}.json".format(self.system.epoch_idx)
-        self.results = []
-
-    def on_batch_end(self, data):
-        image_ids, box_preds = data["image_id"].numpy(), data["box_pred"].numpy()
-        for image_id, box_pred in zip(image_ids, box_preds):
-            box_pred = box_pred[np.sum(box_pred, -1) > 0]
-            for box in box_pred:
-                x1_abs, y1_abs, width_abs, height_abs, label, label_score, _ = box
-                single_result = {
-                    "image_id": image_id,
-                    "category_id": label,
-                    "box": [round(x1_abs, 1), round(y1_abs, 1), round(width_abs, 1), round(height_abs, 1)],
-                    "score": label_score
-                }
-                self.results.append(single_result)
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
@@ -431,13 +415,11 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         LRScheduler(model=model, lr_fn=lr_fn),
         BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
         MeanAveragePrecision(num_classes=80, true_key='bbox', pred_key='box_pred', mode="eval"),
-        COCOMap(inputs=('image_id', 'box_pred'), mode='eval'),
         RestoreWizard(directory=restore_dir)
     ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,
                              traces=traces,
-                             max_train_steps_per_epoch=10,
                              monitor_names=["bbox_loss", "conf_loss", "cls_loss"])
     return estimator
