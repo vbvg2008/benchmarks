@@ -16,11 +16,6 @@ def naively_batched_apply_matrix(v_batched):
 
 
 @jit
-def naively_batched_apply_matrix2(v_batched):
-    return jnp.stack([apply_matrix(v) for v in v_batched])
-
-
-@jit
 def batched_apply_matrix(v_batched):
     return jnp.dot(v_batched, mat.T)
 
@@ -34,7 +29,7 @@ print("naive methods without jit:")
 timeit(lambda: naively_batched_apply_matrix(batched_x).block_until_ready())
 
 print("naive methods with jit:")
-timeit(lambda: naively_batched_apply_matrix2(batched_x).block_until_ready())
+timeit(lambda: jit(naively_batched_apply_matrix)(batched_x).block_until_ready())
 
 print("jax matrix multiplication:")
 timeit(lambda: batched_apply_matrix(batched_x).block_until_ready())

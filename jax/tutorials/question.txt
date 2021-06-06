@@ -1,4 +1,6 @@
 1. why Jax requires a RNG in its function?
+    A: Because the conventional way of handling random number (like in numpy) causes the random state to update.
+    It might create issues when training on multi-processing.   In jax, the state update needs to be done explicitly.
 
 2. why  matrix multiplication on numpy array is slightly slower than using jax array?
     A: numpy data is initialized in CPU and needs to transfer to GPU every time. whereas jax array resides at GPU.
@@ -13,3 +15,14 @@
 6. why calculating second-order derivative is throwing an error Gradient only defined for scalar-output functions. Output had shape: (3,). (3_grad)
 
 7. how to use the jit in function without using @jit?   jit(function) doesn't give the same speedup
+    A: jit(function)(argument).
+
+8. It seems like using jit decorator is faster than jit(function),(2_jit.py), why?
+
+9. when jit isn't available (like when shape is dynamic), using numpy array is faster than using jnp array. (7_jit.py) why?   also, the difference is smaller when shape is static. why?
+
+10. shoudl the random number key keep getting split everytime we create random numbers?
+
+11. Is there an efficient way to jit control flow without using static argument (wichi will build graph every time)? for example. in 13_control_flow.py,
+every value evaluated on `f` will trigger the compiling. However, realistically, the compling only needs to happen two times (one for x<3, one otherwise):
+    A: use lax.cond.

@@ -15,7 +15,9 @@ def selu2(x, alpha=1.67, lmbda=1.05):
 key = random.PRNGKey(0)
 x = random.normal(key, shape=(1000000, ))
 timeit(lambda: selu(x).block_until_ready(), num_runs=1, warmup=False)  # first run takes 342 ms
-timeit(lambda: selu2(x).block_until_ready(), num_runs=1, warmup=False)  # first run takes 95 ms
+timeit(lambda: jit(selu)(x).block_until_ready(), num_runs=1, warmup=False)  # first run takes 96 ms
+timeit(lambda: selu2(x).block_until_ready(), num_runs=1, warmup=False)  # first run takes 54 ms
 
-timeit(lambda: selu(x).block_until_ready(), num_runs=1000, warmup=True)  # takes 1.59ms
-timeit(lambda: selu2(x).block_until_ready(), num_runs=1000, warmup=True)  # takes 0.08ms
+timeit(lambda: selu(x).block_until_ready(), num_runs=1000, warmup=True)  # takes 1.53ms
+timeit(lambda: jit(selu)(x).block_until_ready(), num_runs=1000, warmup=True)  # takes 0.09ms
+timeit(lambda: selu2(x).block_until_ready(), num_runs=1000, warmup=True)  # takes 0.04ms
