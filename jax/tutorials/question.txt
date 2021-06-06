@@ -1,0 +1,15 @@
+1. why Jax requires a RNG in its function?
+
+2. why  matrix multiplication on numpy array is slightly slower than using jax array?
+    A: numpy data is initialized in CPU and needs to transfer to GPU every time. whereas jax array resides at GPU.
+    One can use `device_put` to send data to GPU, and the data will only come back to CPU when needed.
+
+3. why add block until ready when multiplying matrix?
+
+4. seems like the first run without jit takes longer time than using jit.  If it's not compiling program, why is it taking longer? (2_jit.py)
+
+5. how does `jax.grad` handle intermediate gradient calculation? like x -> y -> z -> o,   we need dz/dy ?
+
+6. why calculating second-order derivative is throwing an error Gradient only defined for scalar-output functions. Output had shape: (3,). (3_grad)
+
+7. how to use the jit in function without using @jit?   jit(function) doesn't give the same speedup
