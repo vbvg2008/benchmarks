@@ -4,15 +4,10 @@ import random
 import tempfile
 
 import cv2
+import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from albumentations import BboxParams
-from tensorflow.keras import layers
-from tensorflow.keras.initializers import Constant
-from tensorflow_addons.optimizers import SGDW
-from torch.utils.data import Dataset
-
-import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -24,6 +19,9 @@ from fastestimator.schedule import EpochScheduler, cosine_decay
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import MeanAveragePrecision
+from tensorflow.keras import layers
+from tensorflow.keras.initializers import Constant
+from torch.utils.data import Dataset
 
 
 # This dataset selects 4 images and its bboxes
@@ -180,7 +178,12 @@ class GTBox(NumpyOp):
 
 
 def conv_block(x, c, k=1, s=1):
-    x = layers.Conv2D(filters=c, kernel_size=k, strides=s, padding='same', use_bias=False)(x)
+    x = layers.Conv2D(filters=c,
+                      kernel_size=k,
+                      strides=s,
+                      padding='same',
+                      use_bias=False,
+                      kernel_regularizer=tf.keras.regularizers.L2(0.0005))(x)
     x = layers.BatchNormalization(momentum=0.97)(x)
     x = tf.nn.silu(x)
     return x
@@ -246,11 +249,23 @@ def yolov5(input_shape, num_classes, strides=(8, 16, 32)):
         bias[:, 4] += math.log(8 / (640 / stride)**2)  # obj (8 objects per 640 image)
         bias[:, 5:] += math.log(0.6 / (num_classes - 0.99))  # cls
         biases.append(bias.flatten())
-    out_17 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[0]))(x_17)
+    out_17 = layers.Conv2D((num_classes + 5) * 3,
+                           1,
+                           bias_initializer=Constant(biases[0]),
+                           kernel_regularizer=tf.keras.regularizers.L2(0.0005),
+                           bias_regularizer=tf.keras.regularizers.L2(0.0005))(x_17)
     out_17 = layers.Reshape((out_17.shape[1], out_17.shape[2], 3, num_classes + 5))(out_17)
-    out_20 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[1]))(x_20)
+    out_20 = layers.Conv2D((num_classes + 5) * 3,
+                           1,
+                           bias_initializer=Constant(biases[1]),
+                           kernel_regularizer=tf.keras.regularizers.L2(0.0005),
+                           bias_regularizer=tf.keras.regularizers.L2(0.0005))(x_20)
     out_20 = layers.Reshape((out_20.shape[1], out_20.shape[2], 3, num_classes + 5))(out_20)
-    out_23 = layers.Conv2D((num_classes + 5) * 3, 1, bias_initializer=Constant(biases[2]))(x_23)
+    out_23 = layers.Conv2D((num_classes + 5) * 3,
+                           1,
+                           bias_initializer=Constant(biases[2]),
+                           kernel_regularizer=tf.keras.regularizers.L2(0.0005),
+                           bias_regularizer=tf.keras.regularizers.L2(0.0005))(x_23)
     out_23 = layers.Reshape((out_23.shape[1], out_23.shape[2], 3, num_classes + 5))(out_23)  # B, h/32, w/32, 3, 85
     return tf.keras.Model(inputs=inp, outputs=[out_17, out_20, out_23])
 
@@ -432,7 +447,7 @@ def lr_schedule_warmup(step):
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
-                  epochs=300,
+                  epochs=200,
                   batch_size=64):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
@@ -500,7 +515,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
-                     optimizer_fn=lambda: SGDW(momentum=0.937, weight_decay=0.0005, nesterov=True))
+                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937, learning_rate=1e-2))
     network = fe.Network(ops=[
         Rescale(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),

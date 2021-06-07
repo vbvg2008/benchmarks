@@ -53,11 +53,11 @@ def yolov5(input_shape, num_classes):
     x = spatial_pyramid_pooling(x, c=512)
     x = csp_bottleneck_conv3(x, 512, shortcut=False)
     x_10 = conv_block(x, 256)
-    x = layers.UpSampling2D()(x_10)
+    x = layers.Conv2DTranspose(filters=256, kernel_size=3, strides=2, padding="SAME", activation='relu')(x_10)
     x = tf.concat([x, x_6], axis=-1)
     x = csp_bottleneck_conv3(x, 256, shortcut=False)
     x_14 = conv_block(x, 128)
-    x = layers.UpSampling2D()(x_14)
+    x = layers.Conv2DTranspose(filters=128, kernel_size=3, strides=2, padding="SAME", activation='relu')(x_14)
     x = tf.concat([x, x_4], axis=-1)
     x_17 = csp_bottleneck_conv3(x, 128, shortcut=False)
     x = conv_block(x_17, 128, 3, 2)
@@ -179,10 +179,10 @@ def RetinaNet(input_shape, num_classes, num_anchor=9):
     assert resnet50.layers[-1].name == "conv5_block3_out"
     C5 = resnet50.layers[-1].output
     P5 = layers.Conv2D(256, kernel_size=1, strides=1, padding='same', kernel_regularizer=regularizers.l2(0.0001))(C5)
-    P5_upsampling = layers.UpSampling2D()(P5)
+    P5_upsampling = layers.Conv2DTranspose(filters=256, kernel_size=3, strides=2, padding="SAME", activation='relu')(P5)
     P4 = layers.Conv2D(256, kernel_size=1, strides=1, padding='same', kernel_regularizer=regularizers.l2(0.0001))(C4)
     P4 = layers.Add()([P5_upsampling, P4])
-    P4_upsampling = layers.UpSampling2D()(P4)
+    P4_upsampling = layers.Conv2DTranspose(filters=256, kernel_size=3, strides=2, padding="SAME", activation='relu')(P4)
     P3 = layers.Conv2D(256, kernel_size=1, strides=1, padding='same', kernel_regularizer=regularizers.l2(0.0001))(C3)
     P3 = layers.Add()([P4_upsampling, P3])
     P6 = layers.Conv2D(256,
@@ -255,5 +255,24 @@ def benchmark_model(model, num_trials=1000):
 if __name__ == "__main__":
     model_yolov5 = yolov5(input_shape=(512, 512, 3), num_classes=90)  #7,300,878
     model_retinanet = RetinaNet(input_shape=(512, 512, 3), num_classes=90)  #38,202,702
-    benchmark_model(model_retinanet) #15.26ms/image
-    benchmark_model(model_yolov5) #9.56ms/image
+    #                                       w/o XLA        XLA
+    benchmark_model(model_retinanet)  #15.26ms/image        17.52ms/image
+    benchmark_model(model_yolov5)  #9.56ms/image            9.46ms/image
+
+#===============tf 2.4.1=============================================================
+# GPU results:     @tf.function              XLA            no decorator
+# retinanet         15.84 ms/image        17.52 ms/image    96.36 ms/image
+# yolo              9.89 ms/image        9.46 ms/image      79.56 ms/image
+
+# CPU results:     @tf.function               XLA           no decorator
+# retinanet         559 ms/image        593 ms/image        771 ms/image
+# yolo              87 ms/image         93 ms/image         192 ms/image
+
+#===============tf 2.5.0=============================================================
+# GPU results:     @tf.function               XLA            no decorator
+# retinanet         20.44 ms/image        16.67 ms/image     102 ms/image
+# yolo              12.42 ms/image        9.57 ms/image      82 ms/image
+
+# CPU results:     @tf.function             XLA              no decorator
+# retinanet         568 ms/image          596 ms/image        757 ms/image
+# yolo              89 ms/image           102 ms/image        182 ms/image
