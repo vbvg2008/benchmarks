@@ -1,8 +1,8 @@
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras import layers
+import time
 
 import fastestimator as fe
+import numpy as np
+import tensorflow as tf
 from fastestimator.architecture.tensorflow import LeNet
 from fastestimator.dataset import LabeledDirDataset
 from fastestimator.op.numpyop import NumpyOp
@@ -12,6 +12,7 @@ from fastestimator.op.tensorop.loss import CrossEntropy
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
 from fastestimator.trace.metric import Accuracy
+from tensorflow.keras import layers
 
 
 def my_resnet50():
@@ -59,3 +60,25 @@ def get_estimator():
 """
 GTX 1080ti batch size 64 -- 190 img/sec
 """
+
+
+@tf.function
+def single_inference(model, data):
+    output = model(data, training=False)
+    return output
+
+
+def benchmark_model(model, num_trials=100):
+    total_time = []
+    for i in range(num_trials):
+        data = np.random.rand(1, 224, 224, 3)
+        start = time.time()
+        output = single_inference(model=model, data=data)
+        total_time.append(time.time() - start)
+        # print("-----{} / {} ----".format(i + 1, num_trials))
+    print("Average Inferencing speed is {} ms with {} trials".format(np.mean(total_time[1:]) * 1000, num_trials))
+
+
+if __name__ == "__main__":
+    model = my_resnet50()
+    benchmark_model(model)  # 6.975ms on V100, 67.16 ms on CPU.
