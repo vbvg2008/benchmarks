@@ -37,3 +37,6 @@ def f2(x):
 print(f2(2))
 print(f2(4))  # graph not building, yay!
 print(f2(4))  # graph not building, yay!
+
+#-------------------------
+# for loop and while loop as is will unroll the loop.   If the loop is needed at run time, you need lax.while_loop and lax.fori_loop
