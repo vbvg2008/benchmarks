@@ -485,18 +485,18 @@ class PredictBox(TensorOp):
 
 
 def lr_schedule_warmup(step):
-    if step < 5499:
-        lr = 0.001 / 5499 * step
+    if step < 2751:
+        lr = 0.001 / 2751 * step
     else:
         lr = 0.001
-    return lr
+    return lr * 2
 
 
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
                   epochs=300,
-                  batch_size=64):
+                  batch_size=128):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
     pipeline = fe.Pipeline(
@@ -592,7 +592,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         4:
         LRScheduler(
             model=model,
-            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1e-3, min_lr=1e-4, start=4))
+            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=2e-3, min_lr=2e-5, start=4))
     }
     traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline,
