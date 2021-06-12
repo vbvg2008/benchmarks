@@ -381,6 +381,7 @@ class DecodePred(TensorOp):
         grid, anchor = grid.repeat(batch_size, 1, 1, 1, 1), anchor.repeat(batch_size, 1, 1, 1, 1)
         bbox_pred, conf_pred, cls_pred = torch.sigmoid(conv_bbox[..., 0:4]), conv_bbox[..., 4:5], conv_bbox[..., 5:]
         xcyc_pred, wh_pred = bbox_pred[..., 0:2], bbox_pred[..., 2:4]
+        xcyc_pred = (xcyc_pred * 2 - 0.5) * stride + grid
         wh_pred = (wh_pred * 2)**2 * anchor
         x1y1_pred = xcyc_pred - wh_pred / 2
         result = torch.cat([x1y1_pred, wh_pred, conf_pred, cls_pred], dim=-1)
