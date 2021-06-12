@@ -379,8 +379,7 @@ class DecodePred(TensorOp):
         batch_size = conv_bbox.size(0)
         grid, anchor = torch.unsqueeze(grid, 0), torch.unsqueeze(anchor, 0)
         grid, anchor = grid.repeat(batch_size, 1, 1, 1, 1), anchor.repeat(batch_size, 1, 1, 1, 1)
-        conv_bbox = torch.sigmoid(conv_bbox)
-        bbox_pred, conf_pred, cls_pred = conv_bbox[..., 0:4], conv_bbox[..., 4:5], conv_bbox[..., 5:]
+        bbox_pred, conf_pred, cls_pred = torch.sigmoid(conv_bbox[..., 0:4]), conv_bbox[..., 4:5], conv_bbox[..., 5:]
         xcyc_pred, wh_pred = bbox_pred[..., 0:2], bbox_pred[..., 2:4]
         wh_pred = (wh_pred * 2)**2 * anchor
         x1y1_pred = xcyc_pred - wh_pred / 2
@@ -391,8 +390,8 @@ class DecodePred(TensorOp):
 class ComputeLoss(TensorOp):
     def __init__(self, inputs, outputs, img_size=640, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
-        self.BCEcls = nn.BCELoss(reduction="none")
-        self.BCEobj = nn.BCELoss(reduction="none")
+        self.BCEcls = nn.BCEWithLogitsLoss(reduction="none")
+        self.BCEobj = nn.BCEWithLogitsLoss(reduction="none")
         self.img_size = img_size
 
     def forward(self, data, state):
@@ -400,12 +399,11 @@ class ComputeLoss(TensorOp):
         true_box, true_obj, true_class = torch.split(true, (4, 1, true.size(-1) - 5), dim=-1)
         pred_box, pred_obj, pred_class = torch.split(pred, (4, 1, pred.size(-1) - 5), dim=-1)
         num_classes = pred_class.size(-1)
-        true_class = torch.squeeze(torch.nn.functional.one_hot(true_class.long(), num_classes), -2).float()
+        true_class = torch.squeeze(torch.nn.functional.one_hot(true_class.long(), num_classes), -2).half()
         box_scale = 2 - 1.0 * true_box[..., 2:3] * true_box[..., 3:4] / (self.img_size**2)
-        conf_focal = (true_obj - pred_obj)**2
         iou = torch.unsqueeze(self.bbox_iou(pred_box, true_box, giou=True), -1)
         iou_loss = (1 - iou) * true_obj * box_scale
-        conf_loss = conf_focal * self.BCEobj(pred_obj, true_obj)
+        conf_loss = self.BCEobj(pred_obj, true_obj)
         class_loss = true_obj * self.BCEcls(pred_class, true_class)
         iou_loss = torch.mean(torch.sum(iou_loss, (1, 2, 3, 4)))
         conf_loss = torch.mean(torch.sum(conf_loss, (1, 2, 3, 4)))
@@ -470,8 +468,8 @@ class PredictBox(TensorOp):
                     preds_cls = preds[classes == clss]
                     x1, y1, w, h = preds_cls[:, 0], preds_cls[:, 1], preds_cls[:, 2], preds_cls[:, 3]
                     x2, y2 = x1 + w, y1 + h
-                    conf_score, label = preds_cls[:, 4], classes[classes == clss]
-                    selected_bboxes = torch.stack([x1, y1, x2, y2, conf_score, label.float()], dim=-1)
+                    conf_score, label = torch.sigmoid(preds_cls[:, 4]), classes[classes == clss]
+                    selected_bboxes = torch.stack([x1, y1, x2, y2, conf_score, label.to(x1.dtype)], dim=-1)
                     nms_keep = torchvision.ops.nms(selected_bboxes[:, :4], selected_bboxes[:, 4], iou_threshold=0.35)
                     selected_bboxes = selected_bboxes[nms_keep]
                     selected_boxes_all_classes = torch.cat([selected_boxes_all_classes, selected_bboxes], dim=0)
@@ -496,7 +494,7 @@ def lr_schedule_warmup(step):
 def get_estimator(data_dir="/data/data/public/COCO2017/",
                   model_dir=tempfile.mkdtemp(),
                   restore_dir=tempfile.mkdtemp(),
-                  epochs=200,
+                  epochs=300,
                   batch_size=64):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
@@ -566,7 +564,8 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         ],
         pad_value=0)
     model = fe.build(lambda: YoloV5(w=640, h=640, c=3),
-                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.001, momentum=0.937, weight_decay=0.0005))
+                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.001, momentum=0.937, weight_decay=0.0005),
+                     mixed_precision=True)
     network = fe.Network(ops=[
         RescaleTranspose(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
