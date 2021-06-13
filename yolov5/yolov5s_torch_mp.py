@@ -474,11 +474,15 @@ class PredictBox(TensorOp):
                     selected_bboxes = torch.stack([x1, y1, x2, y2, conf_score, label.to(x1.dtype)], dim=-1)
                     nms_keep = torchvision.ops.nms(selected_bboxes[:, :4], selected_bboxes[:, 4], iou_threshold=0.35)
                     selected_bboxes = selected_bboxes[nms_keep]
-                    selected_bboxes[:, 2] = selected_bboxes[:, 2] - selected_bboxes[:, 0]  # x2 -> width
-                    selected_bboxes[:, 3] = selected_bboxes[:, 3] - selected_bboxes[:, 1]  # y1 -> height
                     selected_boxes_all_classes = torch.cat([selected_boxes_all_classes, selected_bboxes], dim=0)
-            select = torch.ones_like(selected_boxes_all_classes[:, 0:1])
-            results_single = torch.cat([selected_boxes_all_classes, select], dim=-1)
+            # clamp values:
+            x1_abs = selected_boxes_all_classes[:, 0].clamp(0, self.width)
+            y1_abs = selected_boxes_all_classes[:, 1].clamp(0, self.height)
+            width_abs = torch.min((selected_boxes_all_classes[:, 2] - x1_abs).clamp(0), self.width - x1_abs)
+            height_abs = torch.min((selected_boxes_all_classes[:, 3] - y1_abs).clamp(0), self.height - y1_abs)
+            labels_score, labels = selected_boxes_all_classes[:, 4], selected_boxes_all_classes[:, 5]
+            results_single = [x1_abs, y1_abs, width_abs, height_abs, labels, labels_score, torch.ones_like(x1_abs)]
+            results_single = torch.stack(results_single, dim=-1)
             # pad 0 to other rows to improve performance
             results_single = torch.nn.functional.pad(results_single,
                                                      (0, 0, 0, self.max_outputs - results_single.size(0)))
@@ -489,9 +493,9 @@ class PredictBox(TensorOp):
 
 def lr_schedule_warmup(step):
     if step < 2751:
-        lr = 0.001 / 2751 * step
+        lr = 0.01 / 2751 * step
     else:
-        lr = 0.001
+        lr = 0.01
     return lr * 2
 
 
@@ -568,7 +572,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         ],
         pad_value=0)
     model = fe.build(lambda: YoloV5(w=640, h=640, c=3),
-                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.001, momentum=0.937, weight_decay=0.0005),
+                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.02, momentum=0.937, weight_decay=0.0005),
                      mixed_precision=True)
     network = fe.Network(ops=[
         RescaleTranspose(inputs="image", outputs="image"),
@@ -595,7 +599,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         4:
         LRScheduler(
             model=model,
-            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=2e-3, min_lr=2e-5, start=4))
+            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=2e-2, min_lr=2e-4, start=4))
     }
     traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline,
