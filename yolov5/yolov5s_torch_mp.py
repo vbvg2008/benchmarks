@@ -460,6 +460,7 @@ class PredictBox(TensorOp):
             pred_s, pred_m, pred_l = conv_sbbox[idx], conv_mbbox[idx], conv_lbbox[idx]
             pred_s, pred_m, pred_l = pred_s.view(-1, 85), pred_m.view(-1, 85), pred_l.view(-1, 85)
             preds = torch.cat([pred_s, pred_m, pred_l], dim=0)
+            preds[:, 4] = torch.sigmoid(preds[:, 4])  # convert logits to confidence score
             preds = preds[preds[:, 4] > self.conf_threshold]  # filter by confidence
             selected_boxes_all_classes = torch.zeros(0, 6).to(conv_sbbox.device)
             if preds.size(0) > 0:
@@ -469,10 +470,12 @@ class PredictBox(TensorOp):
                     preds_cls = preds[classes == clss]
                     x1, y1, w, h = preds_cls[:, 0], preds_cls[:, 1], preds_cls[:, 2], preds_cls[:, 3]
                     x2, y2 = x1 + w, y1 + h
-                    conf_score, label = torch.sigmoid(preds_cls[:, 4]), classes[classes == clss]
+                    conf_score, label = preds_cls[:, 4], classes[classes == clss]
                     selected_bboxes = torch.stack([x1, y1, x2, y2, conf_score, label.to(x1.dtype)], dim=-1)
                     nms_keep = torchvision.ops.nms(selected_bboxes[:, :4], selected_bboxes[:, 4], iou_threshold=0.35)
                     selected_bboxes = selected_bboxes[nms_keep]
+                    selected_bboxes[:, 2] = selected_bboxes[:, 2] - selected_bboxes[:, 0]  # x2 -> width
+                    selected_bboxes[:, 3] = selected_bboxes[:, 3] - selected_bboxes[:, 1]  # y1 -> height
                     selected_boxes_all_classes = torch.cat([selected_boxes_all_classes, selected_bboxes], dim=0)
             select = torch.ones_like(selected_boxes_all_classes[:, 0:1])
             results_single = torch.cat([selected_boxes_all_classes, select], dim=-1)
