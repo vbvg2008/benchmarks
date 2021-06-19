@@ -1,15 +1,16 @@
 import math
-import pdb
 import random
 import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
 from albumentations import BboxParams
+from torch.utils.data import Dataset
+
+import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -19,9 +20,9 @@ from fastestimator.op.tensorop import Average, TensorOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.schedule import EpochScheduler, cosine_decay
 from fastestimator.trace.adapt import LRScheduler
-from fastestimator.trace.io import BestModelSaver, RestoreWizard
+from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.metric import MeanAveragePrecision
-from torch.utils.data import Dataset
+from fastestimator.util import get_num_devices
 
 
 # This dataset selects 4 images and its bboxes
@@ -491,21 +492,25 @@ class PredictBox(TensorOp):
         return final_results
 
 
-def lr_schedule_warmup(step):
-    if step < 2751:
-        lr = 0.01 / 2751 * step
+def lr_schedule_warmup(step, train_steps_epoch, init_lr):
+    warmup_steps = train_steps_epoch * 3
+    if step < warmup_steps:
+        lr = init_lr / warmup_steps * step
     else:
-        lr = 0.01
-    return lr * 2
+        lr = init_lr
+    return lr
 
 
-def get_estimator(data_dir="/data/data/public/COCO2017/",
+def get_estimator(data_dir,
                   model_dir=tempfile.mkdtemp(),
-                  restore_dir=tempfile.mkdtemp(),
                   epochs=200,
-                  batch_size=128):
+                  batch_size_per_gpu=32,
+                  max_train_steps_per_epoch=None,
+                  max_eval_steps_per_epoch=None):
+    num_device = get_num_devices()
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir)
     train_ds = PreMosaicDataset(mscoco_ds=train_ds)
+    batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
@@ -571,9 +576,11 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
             Delete(keys="image_id", mode="eval")
         ],
         pad_value=0)
-    model = fe.build(lambda: YoloV5(w=640, h=640, c=3),
-                     optimizer_fn=lambda x: torch.optim.SGD(x, lr=0.02, momentum=0.937, weight_decay=0.0005),
-                     mixed_precision=True)
+    init_lr = 1e-2 / 64 * batch_size
+    model = fe.build(
+        lambda: YoloV5(w=640, h=640, c=3),
+        optimizer_fn=lambda x: torch.optim.SGD(x, lr=init_lr, momentum=0.937, weight_decay=0.0005, nesterov=True),
+        mixed_precision=True)
     network = fe.Network(ops=[
         RescaleTranspose(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
@@ -590,21 +597,26 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
     ])
     traces = [
         MeanAveragePrecision(num_classes=80, true_key='bbox', pred_key='box_pred', mode="eval"),
-        BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max"),
-        RestoreWizard(directory=restore_dir)
+        BestModelSaver(model=model, save_dir=model_dir, metric='mAP', save_best_mode="max")
     ]
     lr_schedule = {
         1:
-        LRScheduler(model=model, lr_fn=lr_schedule_warmup),
+        LRScheduler(
+            model=model,
+            lr_fn=lambda step: lr_schedule_warmup(
+                step, train_steps_epoch=np.ceil(len(train_ds) / batch_size), init_lr=init_lr)),
         4:
         LRScheduler(
             model=model,
-            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=2e-2, min_lr=2e-4, start=4))
+            lr_fn=lambda epoch: cosine_decay(
+                epoch, cycle_length=epochs - 3, init_lr=init_lr, min_lr=init_lr / 100, start=4))
     }
     traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,
                              traces=traces,
-                             monitor_names=["bbox_loss", "conf_loss", "cls_loss"])
+                             monitor_names=["bbox_loss", "conf_loss", "cls_loss"],
+                             max_train_steps_per_epoch=max_train_steps_per_epoch,
+                             max_eval_steps_per_epoch=max_eval_steps_per_epoch)
     return estimator
