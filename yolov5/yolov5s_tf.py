@@ -1,4 +1,5 @@
 import math
+import pdb
 import random
 import tempfile
 
@@ -437,9 +438,9 @@ class PredictBox(TensorOp):
 
 def lr_schedule_warmup(step):
     if step < 5499:
-        lr = 0.001 / 5499 * step
+        lr = 0.01 / 5499 * step
     else:
-        lr = 0.001
+        lr = 0.01
     return lr
 
 
@@ -514,7 +515,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         ],
         pad_value=0)
     model = fe.build(lambda: yolov5(input_shape=(640, 640, 3), num_classes=80),
-                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937, learning_rate=1e-3))
+                     optimizer_fn=lambda: tf.optimizers.SGD(momentum=0.937, learning_rate=1e-2, nesterov=True))
     network = fe.Network(ops=[
         Rescale(inputs="image", outputs="image"),
         ModelOp(model=model, inputs="image", outputs=("pred_s", "pred_m", "pred_l")),
@@ -540,7 +541,7 @@ def get_estimator(data_dir="/data/data/public/COCO2017/",
         4:
         LRScheduler(
             model=model,
-            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1e-3, min_lr=1e-4, start=4))
+            lr_fn=lambda epoch: cosine_decay(epoch, cycle_length=epochs - 3, init_lr=1e-2, min_lr=1e-4, start=4))
     }
     traces.append(EpochScheduler(lr_schedule))
     estimator = fe.Estimator(pipeline=pipeline,
