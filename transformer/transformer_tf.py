@@ -1,14 +1,18 @@
-import pdb
-
 import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 from fastestimator.dataset.data import tednmt
+from fastestimator.op.numpyop import NumpyOp
+from fastestimator.op.tensorop import TensorOp
+from fastestimator.op.tensorop.loss import LossOp
+from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.trace import Trace
 from tensorflow.keras import layers
 from transformers import BertTokenizer
 
 
-class Encode(fe.op.numpyop.NumpyOp):
+class Encode(NumpyOp):
     def __init__(self, tokenizer, inputs, outputs, mode=None):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.tokenizer = tokenizer
@@ -21,8 +25,7 @@ def scaled_dot_product_attention(q, k, v, mask):
     matmul_qk = tf.matmul(q, k, transpose_b=True)
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
-    if mask is not None:
-        scaled_attention_logits += (mask * -1e9)  # this is to make the softmax of masked cells to be 0
+    scaled_attention_logits += (mask * -1e9)  # this is to make the softmax of masked cells to be 0
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
     output = tf.matmul(attention_weights, v)
     return output
@@ -114,8 +117,8 @@ class DecoderLayer(layers.Layer):
         self.dropout2 = layers.Dropout(rate)
         self.dropout3 = layers.Dropout(rate)
 
-    def call(self, x, enc_out, training, look_ahead_mask, padding_mask):
-        attn1 = self.mha1(x, x, x, look_ahead_mask)
+    def call(self, x, enc_out, training, decode_mask, padding_mask):
+        attn1 = self.mha1(x, x, x, decode_mask)
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm1(attn1 + x)
         attn2 = self.mha2(enc_out, enc_out, out1, padding_mask)
@@ -158,34 +161,93 @@ class Decoder(layers.Layer):
         self.dec_layers = [DecoderLayer(em_dim, num_heads, dff, rate) for _ in range(num_layers)]
         self.dropout = layers.Dropout(rate)
 
-    def call(self, x, enc_output, look_ahead_mask, padding_mask, training=None):
+    def call(self, x, enc_output, decode_mask, padding_mask, training=None):
         seq_len = tf.shape(x)[1]
         x = self.embedding(x)
         x *= tf.math.sqrt(tf.cast(self.em_dim, tf.float32))
         x += self.pos_encoding[:, :seq_len, :]
         x = self.dropout(x, training=training)
         for i in range(self.num_layers):
-            x = self.dec_layers[i](x, enc_output, training, look_ahead_mask, padding_mask)
+            x = self.dec_layers[i](x, enc_output, training, decode_mask, padding_mask)
         return x
 
 
 def transformer(num_layers, em_dim, num_heads, dff, input_vocab, target_vocab, max_pos_enc, max_pos_dec, rate=0.1):
     inputs = layers.Input(shape=(None, ))
     targets = layers.Input(shape=(None, ))
-    enc_padding_mask = layers.Input(shape=(None, ))
-    look_ahead_mask = layers.Input(shape=(None, ))
-    dec_padding_mask = layers.Input(shape=(None, ))
-    x = Encoder(num_layers, em_dim, num_heads, dff, input_vocab, max_pos_enc, rate=rate)(inputs, enc_padding_mask)
+    encode_mask = layers.Input(shape=(None, None, None))
+    decode_mask = layers.Input(shape=(None, None, None))
+    x = Encoder(num_layers, em_dim, num_heads, dff, input_vocab, max_pos_enc, rate=rate)(inputs, encode_mask)
     x = Decoder(num_layers, em_dim, num_heads, dff, target_vocab, max_pos_dec, rate=rate)(targets,
                                                                                           x,
-                                                                                          look_ahead_mask,
-                                                                                          dec_padding_mask)
+                                                                                          decode_mask,
+                                                                                          encode_mask)
     x = layers.Dense(target_vocab)(x)
-    model = tf.keras.Model(inputs=[inputs, targets, enc_padding_mask, look_ahead_mask, dec_padding_mask], outputs=x)
+    model = tf.keras.Model(inputs=[inputs, targets, encode_mask, decode_mask], outputs=x)
     return model
 
 
-def fastestimator_run():
+class CreateMasks(TensorOp):
+    def forward(self, data, state):
+        inp, tar = data
+        encode_mask = self.create_padding_mask(inp)
+        dec_look_ahead_mask = self.create_look_ahead_mask(tf.shape(tar)[1])
+        dec_target_padding_mask = self.create_padding_mask(tar)
+        decode_mask = tf.maximum(dec_target_padding_mask, dec_look_ahead_mask)
+        return encode_mask, decode_mask
+
+    @staticmethod
+    def create_padding_mask(seq):
+        seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+        return seq[:, tf.newaxis, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
+
+    @staticmethod
+    def create_look_ahead_mask(size):
+        mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+        return mask  # (seq_len, seq_len)
+
+
+class Move(TensorOp):
+    def forward(self, data, state):
+        target = data
+        return target[:, :-1], target[:, 1:]
+
+
+class MaskedCrossEntropy(LossOp):
+    def __init__(self, inputs, outputs, mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
+
+    def forward(self, data, state):
+        y_pred, y_true = data
+        mask = tf.cast(tf.math.logical_not(tf.math.equal(y_true, 0)), tf.float32)
+        loss = self.loss_fn(y_true, y_pred) * mask
+        loss = tf.reduce_sum(loss) / tf.reduce_sum(mask)
+        return loss
+
+
+def lr_fn(step, em_dim, warmupstep=4000):
+    lr = em_dim**-0.5 * min(step**-0.5, step * warmupstep**-1.5)
+    return lr
+
+
+class MaskedAccuracy(Trace):
+    def on_epoch_begin(self, data):
+        self.correct = 0
+        self.total = 0
+
+    def on_batch_end(self, data):
+        y_pred, y_true = data["pred"].numpy(), data["target_real"].numpy()
+        mask = np.logical_not(y_true == 0)
+        matches = np.logical_and(y_true == np.argmax(y_pred, axis=2), mask)
+        self.correct += np.sum(matches)
+        self.total += np.sum(mask)
+
+    def on_epoch_end(self, data):
+        data.write_with_log(self.outputs[0], self.correct / self.total)
+
+
+def get_estimator(epochs=20, em_dim=128):
     train_ds, eval_ds, test_ds = tednmt.load_data(translate_option="pt_to_en")
     pt_tokenizer = BertTokenizer.from_pretrained("neuralmind/bert-base-portuguese-cased")
     en_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -199,51 +261,26 @@ def fastestimator_run():
             Encode(inputs="target", outputs="target", tokenizer=en_tokenizer)
         ],
         pad_value=0)
-    pipeline.benchmark()
-
-
-def create_padding_mask(seq):
-    seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
-
-    # add extra dimensions to add the padding
-    # to the attention logits.
-    return seq[:, tf.newaxis, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
-
-
-def create_look_ahead_mask(size):
-    mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
-    return mask  # (seq_len, seq_len)
-
-
-def create_masks(inp, tar):
-    # Encoder padding mask
-    enc_padding_mask = create_padding_mask(inp)
-
-    # Used in the 2nd attention block in the decoder.
-    # This padding mask is used to mask the encoder outputs.
-    dec_padding_mask = create_padding_mask(inp)
-
-    # Used in the 1st attention block in the decoder.
-    # It is used to pad and mask future tokens in the input received by
-    # the decoder.
-    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
-    dec_target_padding_mask = create_padding_mask(tar)
-    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-
-    return enc_padding_mask, combined_mask, dec_padding_mask
-
-
-if __name__ == "__main__":
-    model = transformer(num_layers=2,
-                        em_dim=512,
-                        num_heads=8,
-                        dff=2048,
-                        input_vocab=8500,
-                        target_vocab=8000,
-                        max_pos_enc=10000,
-                        max_pos_dec=6000)
-    temp_input = tf.random.uniform((64, 38), dtype=tf.int64, minval=0, maxval=200)
-    temp_target = tf.random.uniform((64, 36), dtype=tf.int64, minval=0, maxval=200)
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(temp_input, temp_target)
-    out = model([temp_input, temp_target, enc_padding_mask, combined_mask, dec_padding_mask], training=False)
-    # pdb.set_trace()
+    model = fe.build(
+        model_fn=lambda: transformer(num_layers=4,
+                                     em_dim=em_dim,
+                                     num_heads=8,
+                                     dff=512,
+                                     input_vocab=pt_tokenizer.vocab_size,
+                                     target_vocab=en_tokenizer.vocab_size,
+                                     max_pos_enc=1000,
+                                     max_pos_dec=1000),
+        optimizer_fn="adam")
+    network = fe.Network(ops=[
+        Move(inputs="target", outputs=("target_inp", "target_real")),
+        CreateMasks(inputs=("source", "target_inp"), outputs=("encode_mask", "decode_mask")),
+        ModelOp(model=model, inputs=("source", "target_inp", "encode_mask", "decode_mask"), outputs="pred"),
+        MaskedCrossEntropy(inputs=("pred", "target_real"), outputs="ce"),
+        UpdateOp(model=model, loss_name="ce")
+    ])
+    traces = [
+        MaskedAccuracy(inputs=("pred", "target_real"), outputs="acc", mode="!train"),
+        LRScheduler(model=model, lr_fn=lambda step: lr_fn(step, em_dim))
+    ]
+    estimator = fe.Estimator(pipeline=pipeline, network=network, traces=traces, epochs=epochs)
+    return estimator
