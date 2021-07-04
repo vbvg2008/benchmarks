@@ -1,4 +1,6 @@
+import os
 import pdb
+import tempfile
 
 import cv2
 import fastestimator as fe
@@ -14,6 +16,7 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
 from fastestimator.schedule import EpochScheduler
 from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver, RestoreWizard
 from fastestimator.trace.metric import Accuracy
 from fastestimator.util import get_num_devices
 from tensorflow.keras import layers, mixed_precision
@@ -131,10 +134,10 @@ def official_resnet50(bn_momentum=0.9, num_layers=(3, 4, 6, 3)):
     return model
 
 
-def get_estimator(batch_per_gpu=128, epochs=180):
+def get_estimator(data_dir, batch_per_gpu=256, epochs=180, save_dir=tempfile.mkdtemp(), restore_dir=tempfile.mkdtemp()):
 
-    train_ds = LabeledDirDataset("/data/data/public/ImageNet/train")
-    eval_ds = LabeledDirDataset("/data/data/public/ImageNet/val")
+    train_ds = LabeledDirDataset(os.path.join(data_dir, "train"))
+    eval_ds = LabeledDirDataset(os.path.join(data_dir, "val"))
     batch_size = batch_per_gpu * get_num_devices()
     pipeline = Pipeline(
         train_data=train_ds,
@@ -165,7 +168,11 @@ def get_estimator(batch_per_gpu=128, epochs=180):
         L2Loss(model=model, weight_decay=1e-4, inputs="ce", outputs="ce", mode="train"),
         UpdateOp(model=model, loss_name="ce")
     ])
-    traces = [Accuracy(true_key="y", pred_key="y_pred")]
+    traces = [
+        Accuracy(true_key="y", pred_key="y_pred"),
+        BestModelSaver(model=model, save_dir=save_dir, metric="accuracy", save_best_mode="max"),
+        RestoreWizard(directory=restore_dir)
+    ]
     lr_schedule = {
         1:
         LRScheduler(
