@@ -1,3 +1,5 @@
+import pdb
+
 import fastestimator as fe
 import numpy as np
 import tensorflow as tf
@@ -207,7 +209,7 @@ class CreateMasks(TensorOp):
         return mask  # (seq_len, seq_len)
 
 
-class Move(TensorOp):
+class ShiftData(TensorOp):
     def forward(self, data, state):
         target = data
         return target[:, :-1], target[:, 1:]
@@ -272,7 +274,7 @@ def get_estimator(epochs=20, em_dim=128):
                                      max_pos_dec=1000),
         optimizer_fn="adam")
     network = fe.Network(ops=[
-        Move(inputs="target", outputs=("target_inp", "target_real")),
+        ShiftData(inputs="target", outputs=("target_inp", "target_real")),
         CreateMasks(inputs=("source", "target_inp"), outputs=("encode_mask", "decode_mask")),
         ModelOp(model=model, inputs=("source", "target_inp", "encode_mask", "decode_mask"), outputs="pred"),
         MaskedCrossEntropy(inputs=("pred", "target_real"), outputs="ce"),
