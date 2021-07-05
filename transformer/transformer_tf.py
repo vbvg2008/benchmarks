@@ -1,4 +1,5 @@
 import pdb
+import tempfile
 
 import fastestimator as fe
 import numpy as np
@@ -9,6 +10,7 @@ from fastestimator.op.tensorop import TensorOp
 from fastestimator.op.tensorop.loss import LossOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.trace import Trace
 from tensorflow.keras import layers
 from transformers import BertTokenizer
@@ -249,7 +251,7 @@ class MaskedAccuracy(Trace):
         data.write_with_log(self.outputs[0], self.correct / self.total)
 
 
-def get_estimator(epochs=20, em_dim=128):
+def get_estimator(epochs=20, em_dim=128, save_dir=tempfile.mkdtemp()):
     train_ds, eval_ds, test_ds = tednmt.load_data(translate_option="pt_to_en")
     pt_tokenizer = BertTokenizer.from_pretrained("neuralmind/bert-base-portuguese-cased")
     en_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -281,7 +283,8 @@ def get_estimator(epochs=20, em_dim=128):
         UpdateOp(model=model, loss_name="ce")
     ])
     traces = [
-        MaskedAccuracy(inputs=("pred", "target_real"), outputs="acc", mode="!train"),
+        MaskedAccuracy(inputs=("pred", "target_real"), outputs="masked_acc", mode="!train"),
+        BestModelSaver(model=model, save_dir=save_dir, metric="masked_acc", save_best_mode="max"),
         LRScheduler(model=model, lr_fn=lambda step: lr_fn(step, em_dim))
     ]
     estimator = fe.Estimator(pipeline=pipeline, network=network, traces=traces, epochs=epochs)
