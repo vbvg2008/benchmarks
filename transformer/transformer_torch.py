@@ -1,4 +1,5 @@
 import math
+import pdb
 
 import fastestimator as fe
 import numpy as np
@@ -11,6 +12,7 @@ from fastestimator.op.tensorop.loss import LossOp
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.trace import Trace
+from fastestimator.util import get_num_devices
 from torch.nn import TransformerDecoder, TransformerDecoderLayer, TransformerEncoder, TransformerEncoderLayer
 from transformers import BertTokenizer
 
@@ -70,6 +72,8 @@ class Transformer(nn.Module):
         self.final_linear = nn.Linear(em_dim, target_vocab)
 
     def forward(self, src, tgt, src_pad_mask, tgt_pad_mask, tgt_mask):
+        # Switch batch and sequence length dimension for pytorch convention
+        src, tgt = src.transpose(0, 1), tgt.transpose(0, 1)
         src_em = self.encode_embedding(src) * math.sqrt(self.em_dim)
         src_em = self.encode_pos_embedding(src_em)
         src_em = self.encode_dropout(src_em)
@@ -80,9 +84,10 @@ class Transformer(nn.Module):
         decoder_output = self.transformer_decoder(tgt_em,
                                                   encoder_output,
                                                   tgt_key_padding_mask=tgt_pad_mask,
-                                                  tgt_mask=tgt_mask,
+                                                  tgt_mask=tgt_mask[0],
                                                   memory_key_padding_mask=src_pad_mask)
         output = self.final_linear(decoder_output)
+        output = output.transpose(0, 1)  # Switch back
         return output
 
 
@@ -105,11 +110,16 @@ class PositionalEncoding(nn.Module):
 
 
 class CreateMasks(TensorOp):
+    def __init__(self, inputs, outputs, mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.num_device = get_num_devices()
+
     def forward(self, data, state):
         inp, tar = data
         encode_pad_mask = self.create_padding_mask(inp)
         decode_pad_mask = self.create_padding_mask(tar)
         dec_look_ahead_mask = self.create_look_ahead_mask(tar)
+        dec_look_ahead_mask = torch.stack([dec_look_ahead_mask for _ in range(self.num_device)])
         return encode_pad_mask, decode_pad_mask, dec_look_ahead_mask
 
     @staticmethod
@@ -119,13 +129,6 @@ class CreateMasks(TensorOp):
     @staticmethod
     def create_look_ahead_mask(seq):
         return torch.triu(torch.ones(seq.size(1), seq.size(1), dtype=torch.bool), diagonal=1).to(seq.device)
-
-
-class TransposeBatch(TensorOp):
-    def forward(self, data, state):
-        source, target_inp, target_real = data
-        # B, seq_len -> seq_len, B, due to pytorch convention, maybe to help slice array
-        return source.transpose(0, 1), target_inp.transpose(0, 1), target_real.transpose(0, 1)
 
 
 class MaskedCrossEntropy(LossOp):
@@ -174,7 +177,6 @@ def get_estimator(epochs=20, em_dim=128):
         ShiftData(inputs="target", outputs=("target_inp", "target_real")),
         CreateMasks(inputs=("source", "target_inp"),
                     outputs=("encode_pad_mask", "decode_pad_mask", "dec_look_ahead_mask")),
-        TransposeBatch(inputs=("source", "target_inp", "target_real"), outputs=("source", "target_inp", "target_real")),
         ModelOp(model=model,
                 inputs=("source", "target_inp", "encode_pad_mask", "decode_pad_mask", "dec_look_ahead_mask"),
                 outputs="pred"),
