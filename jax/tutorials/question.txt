@@ -17,7 +17,9 @@
 7. how to use the jit in function without using @jit?   jit(function) doesn't give the same speedup
     A: jit(function)(argument).
 
-8. It seems like using jit decorator is faster than jit(function),(2_jit.py), why?
+8. It seems like using jit decorator is faster than jit(function),(2_jit.py, 17_jit_compile), why?
+    A: function caching.  if jit(f) is called inside a loop, then the function is compiled everytime. (but not traced every time)
+
 
 9. when jit isn't available (like when shape is dynamic), using numpy array is faster than using jnp array. (7_jit.py) why?   also, the difference is smaller when shape is static. why?
 
@@ -26,3 +28,6 @@
 11. Is there an efficient way to jit control flow without using static argument (wichi will build graph every time)? for example. in 13_control_flow.py,
 every value evaluated on `f` will trigger the compiling. However, realistically, the compling only needs to happen two times (one for x<3, one otherwise):
     A: use lax.cond.
+
+
+12. How many copies of cached function will jax store?
