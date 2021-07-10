@@ -1,6 +1,5 @@
 import math
 import os
-import pdb
 import random
 import tempfile
 
@@ -18,7 +17,7 @@ from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.pipeline import Pipeline
 from fastestimator.schedule import EpochScheduler
 from fastestimator.trace.adapt import LRScheduler
-from fastestimator.trace.io import BestModelSaver, RestoreWizard
+from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.metric import Accuracy
 from fastestimator.util import get_num_devices
 from PIL import Image, ImageEnhance, ImageOps, ImageTransform
