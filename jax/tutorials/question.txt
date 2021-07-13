@@ -24,6 +24,7 @@
 9. when jit isn't available (like when shape is dynamic), using numpy array is faster than using jnp array. (7_jit.py) why?   also, the difference is smaller when shape is static. why?
 
 10. shoudl the random number key keep getting split everytime we create random numbers?
+    A: Yes, there's a single-use principle for every random key
 
 11. Is there an efficient way to jit control flow without using static argument (wichi will build graph every time)? for example. in 13_control_flow.py,
 every value evaluated on `f` will trigger the compiling. However, realistically, the compling only needs to happen two times (one for x<3, one otherwise):
