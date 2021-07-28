@@ -1,7 +1,7 @@
 """
 pip install -U tf2onnx
 pip install onnxruntime
-python -m tf2onnx.convert --saved-model /data/Xiaomeng/saved_model/1/ --output model.onnx
+python -m tf2onnx.convert --saved-model /data/saved_model/1/ --output model.onnx
 INFO - Model inputs: ['input_1']
 INFO - Model outputs: ['dense']
 """

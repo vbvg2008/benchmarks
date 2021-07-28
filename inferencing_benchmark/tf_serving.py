@@ -9,7 +9,6 @@ import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 from util import timeit
-
 """
 step 0: pull the latest devel image by: docker pull tensorflow/serving:latest-devel-gpu
 step 1: save model to a specific place
@@ -18,7 +17,7 @@ step 3: run
 tensorflow_model_server \
     --rest_api_port=8501 \
     --model_name=fashion_model \
-    --model_base_path=/data/Xiaomeng/saved_model
+    --model_base_path=/data/saved_model
 step 4: open another terminal, go to the container, and run predict
 
 
@@ -53,8 +52,7 @@ def my_resnet50():
 
 def save_model():
     model = my_resnet50()
-    temp_dir = tempfile.mkdtemp()
-    model_dir = os.path.join(temp_dir, "1")
+    model_dir = os.path.join("/data/saved_model", "1")
     tf.keras.models.save_model(model,
                                model_dir,
                                include_optimizer=False,

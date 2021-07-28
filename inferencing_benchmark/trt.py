@@ -4,7 +4,7 @@ docker pull nvcr.io/nvidia/tensorrt:21.07-py3
 first follow the onnx tutorial and create onnx model
 
 next, generate the trt engine
-trtexec --onnx=/data/Xiaomeng/onnx/model.onnx --saveEngine=resnet_engine.trt  --explicitBatch
+trtexec --onnx=/data/onnx/model.onnx --saveEngine=resnet_engine.trt  --explicitBatch
 
 next, run the python script
 """
@@ -17,7 +17,7 @@ import pycuda.driver as cuda
 import tensorrt as trt
 from util import timeit
 
-f = open("/data/Xiaomeng/trt_v100/resnet_engine.trt", "rb")
+f = open("/data/trt/resnet_engine.trt", "rb")
 runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
 engine = runtime.deserialize_cuda_engine(f.read())
 context = engine.create_execution_context()
@@ -45,4 +45,4 @@ def predict(batch):  # result gets copied into output
     return output
 
 
-timeit(lambda: predict(input_batch))
+timeit(lambda: predict(input_batch), num_runs=1000)
