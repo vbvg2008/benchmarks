@@ -15,8 +15,9 @@ import numpy as np
 import pycuda.autoinit
 import pycuda.driver as cuda
 import tensorrt as trt
+from util import timeit
 
-f = open("/data/Xiaomeng/trt/resnet_engine.trt", "rb")
+f = open("/data/Xiaomeng/trt_v100/resnet_engine.trt", "rb")
 runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
 engine = runtime.deserialize_cuda_engine(f.read())
 context = engine.create_execution_context()
@@ -44,10 +45,4 @@ def predict(batch):  # result gets copied into output
     return output
 
 
-print("Warming up...")
-
-trt_predictions = predict(input_batch).astype(np.float32)
-pdb.set_trace()
-print("Done warming up!")
-
-
+timeit(lambda: predict(input_batch))

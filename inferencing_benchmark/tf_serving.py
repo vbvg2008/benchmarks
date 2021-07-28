@@ -8,6 +8,7 @@ import requests
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
+from util import timeit
 
 """
 step 0: pull the latest devel image by: docker pull tensorflow/serving:latest-devel-gpu
@@ -17,7 +18,7 @@ step 3: run
 tensorflow_model_server \
     --rest_api_port=8501 \
     --model_name=fashion_model \
-    --model_base_path=your/path/to/model
+    --model_base_path=/data/Xiaomeng/saved_model
 step 4: open another terminal, go to the container, and run predict
 
 
@@ -113,5 +114,9 @@ def prediction():
     pdb.set_trace()
 
 
-prediction()
-# load_freeze_graph()
+if __name__ == "__main__":
+    data = json.dumps({
+        "signature_name": "serving_default", "instances": np.random.rand(1, 224, 224, 3).astype("float32").tolist()
+    })
+    headers = {"content-type": "application/json"}
+    timeit(f=lambda: requests.post('http://localhost:8501/v1/models/fashion_model:predict', data=data, headers=headers))

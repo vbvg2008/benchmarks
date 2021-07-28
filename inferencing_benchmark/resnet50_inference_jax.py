@@ -8,6 +8,7 @@ from jax import grad, jit, random
 from jax.experimental import optimizers, stax
 from jax.experimental.stax import AvgPool, BatchNorm, Conv, Dense, FanInSum, FanOut, Flatten, GeneralConv, Identity, \
     LogSoftmax, MaxPool, Relu
+from util import timeit
 
 # ResNet blocks compose other layers
 
@@ -76,26 +77,17 @@ def ResNet50(num_classes):
                        LogSoftmax)
 
 
+@jit
+def single_inference(params, inputs):
+    logits = predict_fun(params, inputs)
+    return logits
+
+
 if __name__ == "__main__":
     rng_key = random.PRNGKey(0)
     input_shape = (224, 224, 3, 1)
-    num_classes = 1001
-
+    num_classes = 1000
     init_fun, predict_fun = ResNet50(num_classes)
     _, init_params = init_fun(rng_key, input_shape)
-
-    @jit
-    def single_inference(params, inputs):
-        logits = predict_fun(params, inputs)
-        return logits
-
-    num_trials = 100
-    total_time = []
-    for i in range(num_trials):
-        data = np.random.rand(224, 224, 3, 1)
-        start = time.time()
-        result = single_inference(init_params, data)
-        total_time.append(time.time() - start)
-        # print("-----{} / {} ----".format(i + 1, num_trials))
-    print("Average Inferencing speed is {} ms with {} trials".format(np.mean(total_time[1:]) * 1000, num_trials))
-    # GPU: 5ms, CPU: 45 ms
+    data = np.random.rand(224, 224, 3, 1).astype("float32")
+    timeit(f=lambda: single_inference(init_params, data))
