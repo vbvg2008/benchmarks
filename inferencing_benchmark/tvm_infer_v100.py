@@ -82,6 +82,13 @@ def tune_tasks(
     os.remove(tmp_log_file)
 
 
+def evaluate_fn(module, data):
+    module.set_input("input_1", data)
+    module.run()
+    output = module.get_output(0)
+    return output
+
+
 if __name__ == "__main__":
     onnx_model = onnx.load("/data/Xiaomeng/onnx/model.onnx")
     shape_dict = {"input_1": (1, 224, 224, 3)}
@@ -91,32 +98,42 @@ if __name__ == "__main__":
     # target = "llvm"
     # device = tvm.cpu()
 
-    print("Tuning...")
-    tasks = autotvm.task.extract_from_program(mod["main"],
-                                              target=target,
-                                              params=params,
-                                              ops=(relay.op.get("nn.conv2d"), ))
+    # print("Tuning...")
+    # tasks = autotvm.task.extract_from_program(mod["main"],
+    #                                           target=target,
+    #                                           params=params,
+    #                                           ops=(relay.op.get("nn.conv2d"), ))
+    log_file = "tvm.log"
+    # tuning_option = {
+    #     "log_filename":
+    #     log_file,
+    #     "tuner":
+    #     "xgb",
+    #     "n_trial":
+    #     2000,
+    #     "early_stopping":
+    #     600,
+    #     "measure_option":
+    #     autotvm.measure_option(builder=autotvm.LocalBuilder(timeout=10),
+    #                            runner=autotvm.LocalRunner(number=20, repeat=3, timeout=4, min_repeat_ms=150))
+    # }
 
-    tuning_option = {
-        "log_filename":
-        "resnet50.log",
-        "tuner":
-        "xgb",
-        "n_trial":
-        2000,
-        "early_stopping":
-        600,
-        "measure_option":
-        autotvm.measure_option(builder=autotvm.LocalBuilder(timeout=10),
-                               runner=autotvm.LocalRunner(number=20, repeat=3, timeout=4, min_repeat_ms=150))
-    }
+    # tune_tasks(tasks, **tuning_option)
 
-    tune_tasks(tasks, **tuning_option)
-    print("Compile...")
-    with tvm.transform.PassContext(opt_level=3):
-        intrp = relay.build_module.create_executor("graph", mod, device, target)
+    with autotvm.apply_history_best(log_file):
+        print("Compile...")
+        with tvm.transform.PassContext(opt_level=3):
+            lib = relay.build_module.build(mod, target=target, params=params)
 
-    print("Evaluate...")
-    sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
-    eval_fun = intrp.evaluate()
-    timeit(f=lambda: eval_fun(tvm.nd.array(sample_data), **params).numpy(), num_runs=100)
+        # load params
+        module = runtime.GraphModule(lib["default"](device))
+        # data_tvm = tvm.nd.array(np.random.rand(1, 224, 224, 3).astype("float32"))
+        # module.set_input("input_1", data_tvm)
+
+        print("Evaluate...")
+        sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
+        timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=1000)
+
+        # ftimer = module.module.time_evaluator("run", device, number=1, repeat=600)
+        # prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
+        # print("Mean inference time (std dev): %.2f ms (%.2f ms)" % (np.mean(prof_res), np.std(prof_res)))
