@@ -25,6 +25,8 @@ import os
 import pdb
 
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers
 from util import timeit
 
 import onnx
@@ -35,6 +37,16 @@ import tvm.relay.testing
 from tvm import autotvm, relay, te
 from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
 from tvm.autotvm.tuner import GATuner, GridSearchTuner, RandomTuner, XGBTuner
+
+
+def my_resnet50():
+    inputs = layers.Input(shape=(224, 224, 3))
+    backbone = tf.keras.applications.ResNet50(weights=None, include_top=False, pooling='avg', input_tensor=inputs)
+    x = backbone.outputs[0]
+    outputs = layers.Dense(1000, activation='softmax')(x)
+    # outputs = layers.Activation('softmax', dtype='float32')(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
 
 
 def tune_kernels(tasks, measure_option, tuner="gridsearch", early_stopping=None, log_filename="tuning.log"):
@@ -89,6 +101,8 @@ if __name__ == "__main__":
     onnx_model = onnx.load("/data/Xiaomeng/onnx/model.onnx")
     shape_dict = {"input_1": (1, 224, 224, 3)}
     mod, params = relay.frontend.from_onnx(onnx_model, shape_dict)
+    # keras_resnet50 = my_resnet50()
+    # mod, params = relay.frontend.from_keras(keras_resnet50, shape_dict)
     target = "llvm -mcpu=core-avx2"
     device = tvm.cpu()
 
@@ -117,10 +131,10 @@ if __name__ == "__main__":
 
     # with autotvm.apply_history_best(log_file):
     print("Compile...")
-    with tvm.transform.PassContext(opt_level=2):
+    with tvm.transform.PassContext(opt_level=3):
         lib = relay.build_module.build(mod, target=target, params=params)
     # load params
     module = runtime.GraphModule(lib["default"](device))
     print("Evaluate...")
     sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
-    timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=300)
+    timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=100)

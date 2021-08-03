@@ -146,10 +146,10 @@ if __name__ == "__main__":
     log_file = "%s-%s-B%d-%s.json" % (network, layout, batch_size, target.kind.name)
     print("Get model...")
     mod, params, input_shape, output_shape = get_network(network, batch_size, layout, dtype=dtype)
-    print("Extract tasks...")
-    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, target)
-    print("Tuning...")
-    run_tuning(tasks, task_weights, log_file=log_file)
+    # print("Extract tasks...")
+    # tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, target)
+    # print("Tuning...")
+    # run_tuning(tasks, task_weights, log_file=log_file)
     print("Compile...")
     with auto_scheduler.ApplyHistoryBest(log_file):
         with tvm.transform.PassContext(opt_level=3, config={"relay.backend.use_auto_scheduler": True}):
@@ -159,4 +159,4 @@ if __name__ == "__main__":
     module = runtime.GraphModule(lib["default"](device))
     print("Evaluate...")
     sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
-    timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=300)
+    timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=100)

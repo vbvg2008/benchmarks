@@ -1,0 +1,11 @@
+ElapsedTime(s)	95	EstimatedLatency(ms)	38.605	Trials	64
+ElapsedTime(s)	180	EstimatedLatency(ms)	38.486	Trials	128
+ElapsedTime(s)	261	EstimatedLatency(ms)	38.348	Trials	192
+ElapsedTime(s)	351	EstimatedLatency(ms)	38.140	Trials	256
+ElapsedTime(s)	435	EstimatedLatency(ms)	37.755	Trials	320
+ElapsedTime(s)	511	EstimatedLatency(ms)	37.746	Trials	384
+ElapsedTime(s)	587	EstimatedLatency(ms)	37.403	Trials	448
+ElapsedTime(s)	658	EstimatedLatency(ms)	37.329	Trials	512
+ElapsedTime(s)	733	EstimatedLatency(ms)	37.303	Trials	576
+ElapsedTime(s)	825	EstimatedLatency(ms)	37.246	Trials	640
+ElapsedTime(s)	912	EstimatedLatency(ms)	37.236	Trials	704
