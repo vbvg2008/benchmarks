@@ -1,7 +1,7 @@
 """
 git clone --recursive https://github.com/apache/tvm tvm
 ./build.sh conda_cuda100
-create a container, go in container and navigate to the tvm folder
+nvidia-docker run -it --name tvm_cblas -v /data:/data tvm.conda_cuda100:latest /bin/bash, go in container and navigate to the tvm folder
 apt-get update
 apt-get install -y gcc libtinfo-dev zlib1g-dev build-essential cmake libedit-dev libxml2-dev
 mkdir build
@@ -12,12 +12,12 @@ install intel mkl https://software.intel.com/content/www/us/en/develop/articles/
 wget https://apt.repos.intel.com/setup/intelproducts.list -O /etc/apt/sources.list.d/intelproducts.list
 apt-get update
 apt-get install intel-mkl-64bit-2020.4-912
-apt-get install libopenblas-dev
+apt-get install libopenblas-dev libomp-dev
 cd build
 cmake ..
 make -j4 (change 4 to other number if you have more cores)
 cd python
-pip install decorator attrs
+pip install numpy decorator attrs
 python setup.py install
 pip install pytest xgboost onnx
 """
@@ -89,42 +89,38 @@ if __name__ == "__main__":
     onnx_model = onnx.load("/data/Xiaomeng/onnx/model.onnx")
     shape_dict = {"input_1": (1, 224, 224, 3)}
     mod, params = relay.frontend.from_onnx(onnx_model, shape_dict)
-    target = "llvm -mcpu=core-avx2 -libs=cblas"
+    target = "llvm -mcpu=core-avx2"
     device = tvm.cpu()
 
-    print("Tuning...")
-    log_file = "tvm_cpu.log"
-    graph_opt_sch_file = "resnet50_graph_opt.log"
-    tasks = autotvm.task.extract_from_program(mod["main"],
-                                              target=target,
-                                              params=params,
-                                              ops=(relay.op.get("nn.conv2d"), ))
-    tuning_option = {
-        "log_filename":
-        log_file,
-        "tuner":
-        "random",
-        "early_stopping":
-        None,
-        "measure_option":
-        autotvm.measure_option(
-            builder=autotvm.LocalBuilder(),
-            runner=autotvm.LocalRunner(number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True),
-        ),
-    }
-    tune_kernels(tasks, **tuning_option)
+    # print("Tuning...")
+    # log_file = "tvm_cpu.log"
+    # graph_opt_sch_file = "resnet50_graph_opt.log"
+    # tasks = autotvm.task.extract_from_program(mod["main"],
+    #                                           target=target,
+    #                                           params=params,
+    #                                           ops=(relay.op.get("nn.conv2d"), ))
+    # tuning_option = {
+    #     "log_filename":
+    #     log_file,
+    #     "tuner":
+    #     "random",
+    #     "early_stopping":
+    #     None,
+    #     "measure_option":
+    #     autotvm.measure_option(
+    #         builder=autotvm.LocalBuilder(),
+    #         runner=autotvm.LocalRunner(number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True),
+    #     ),
+    # }
+    # tune_kernels(tasks, **tuning_option)
     # tune_graph(mod["main"], (1, 224, 224, 3), log_file, graph_opt_sch_file, target=target)
 
-    with autotvm.apply_history_best(log_file):
-        print("Compile...")
-        with tvm.transform.PassContext(
-                opt_level=2,
-                required_pass=[
-                    "FastMath", "FoldScaleAxis", "CanonicalizeOps", "CanonicalizeCast", "EliminateCommonSubexpr"
-                ]):
-            lib = relay.build_module.build(mod, target=target, params=params)
-        # load params
-        module = runtime.GraphModule(lib["default"](device))
-        print("Evaluate...")
-        sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
-        timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=300)
+    # with autotvm.apply_history_best(log_file):
+    print("Compile...")
+    with tvm.transform.PassContext(opt_level=2):
+        lib = relay.build_module.build(mod, target=target, params=params)
+    # load params
+    module = runtime.GraphModule(lib["default"](device))
+    print("Evaluate...")
+    sample_data = np.random.rand(1, 224, 224, 3).astype("float32")
+    timeit(f=lambda: evaluate_fn(module, sample_data), num_runs=300)
