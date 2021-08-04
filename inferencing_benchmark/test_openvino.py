@@ -14,10 +14,10 @@ from openvino.inference_engine import IECore
 from util import timeit
 
 if __name__ == "__main__":
-    model_xml = "/data/openvino/saved_model.xml"
-    model_bin = "/data/openvino/saved_model.bin"
+    model_xml = "/data/Xiaomeng/openvino/saved_model.xml"
+    model_bin = "/data/Xiaomeng/openvino/saved_model.bin"
     ie_core = IECore()
     net = ie_core.read_network(model=model_xml, weights=model_bin)
     exec_net = ie_core.load_network(network=net, device_name="CPU")
     data = np.random.rand(1, 3, 224, 224).astype("float32")
-    timeit(f=lambda: exec_net.infer({'input_1': data}))
+    timeit(f=lambda: exec_net.infer({'input_1': data}), num_runs=500)
