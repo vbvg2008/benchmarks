@@ -3,26 +3,27 @@ import pdb
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-from tensorflow.keras import layers, regularizers
+from fastestimator.dataset.data import mscoco
+from tensorflow.keras import layers
 
 
-def fpn(C2, C3, C4, C5, l2_reg=1e-4):
+def fpn(C2, C3, C4, C5):
     # lateral conv
-    P5 = layers.Conv2D(256, kernel_size=1, kernel_regularizer=regularizers.l2(l2_reg))(C5)
+    P5 = layers.Conv2D(256, kernel_size=1)(C5)
     P5_up = layers.UpSampling2D()(P5)
-    P4 = layers.Conv2D(256, kernel_size=1, kernel_regularizer=regularizers.l2(l2_reg))(C4)
+    P4 = layers.Conv2D(256, kernel_size=1)(C4)
     P4 = P4 + P5_up
     P4_up = layers.UpSampling2D()(P4)
-    P3 = layers.Conv2D(256, kernel_size=1, kernel_regularizer=regularizers.l2(l2_reg))(C3)
+    P3 = layers.Conv2D(256, kernel_size=1)(C3)
     P3 = P3 + P4_up
     P3_up = layers.UpSampling2D()(P3)
-    P2 = layers.Conv2D(256, kernel_size=1, kernel_regularizer=regularizers.l2(l2_reg))(C2)
+    P2 = layers.Conv2D(256, kernel_size=1)(C2)
     P2 = P2 + P3_up
     # fpn conv
-    P5 = layers.Conv2D(256, kernel_size=3, padding="same", kernel_regularizer=regularizers.l2(l2_reg))(P5)
-    P4 = layers.Conv2D(256, kernel_size=3, padding="same", kernel_regularizer=regularizers.l2(l2_reg))(P4)
-    P3 = layers.Conv2D(256, kernel_size=3, padding="same", kernel_regularizer=regularizers.l2(l2_reg))(P3)
-    P2 = layers.Conv2D(256, kernel_size=3, padding="same", kernel_regularizer=regularizers.l2(l2_reg))(P2)
+    P5 = layers.Conv2D(256, kernel_size=3, padding="same")(P5)
+    P4 = layers.Conv2D(256, kernel_size=3, padding="same")(P4)
+    P3 = layers.Conv2D(256, kernel_size=3, padding="same")(P3)
+    P2 = layers.Conv2D(256, kernel_size=3, padding="same")(P2)
     return P2, P3, P4, P5
 
 
@@ -62,8 +63,8 @@ def solov2_head_model(stacked_convs=4, ch_in=258, ch_feature=512, ch_kernel_out=
     return tf.keras.Model(inputs=inputs, outputs=[feature_kernel, feature_cls])
 
 
-def solov2_head(P2, P3, P4, P5):
-    head_model = solov2_head_model()
+def solov2_head(P2, P3, P4, P5, num_classes=80):
+    head_model = solov2_head_model(num_classes=num_classes)
     # applying maxpool first for P2
     P2 = layers.MaxPool2D()(P2)
     features = [P2, P3, P4, P5, P5]
@@ -79,7 +80,6 @@ def solov2_head(P2, P3, P4, P5):
 
 
 def solov2_maskhead(P2, P3, P4, P5, mid_ch=128, out_ch=256):
-    pdb.set_trace()
     # first level
     P2 = tf.nn.relu(conv_norm(P2, filters=mid_ch))
     # second level
@@ -102,7 +102,7 @@ def solov2_maskhead(P2, P3, P4, P5, mid_ch=128, out_ch=256):
     return seg_outputs
 
 
-def solov2(input_shape, l2_reg=1e-4):
+def solov2(input_shape=(None, None, 3), num_classes=80):
     inputs = tf.keras.Input(shape=input_shape)
     resnet50 = tf.keras.applications.ResNet50(weights="imagenet", include_top=False, input_tensor=inputs, pooling=None)
     assert resnet50.layers[38].name == "conv2_block3_out"
@@ -113,11 +113,17 @@ def solov2(input_shape, l2_reg=1e-4):
     C4 = resnet50.layers[142].output
     assert resnet50.layers[-1].name == "conv5_block3_out"
     C5 = resnet50.layers[-1].output
-    P2, P3, P4, P5 = fpn(C2, C3, C4, C5, l2_reg=l2_reg)
-    feat_seg = solov2_maskhead(P2, P3, P4, P5)  # [B, h/4, w/4, 128]
-    feat_cls_list, feat_kernel_list = solov2_head(P2, P3, P4, P5)  # [B, grid, grid, 80], [B, grid, grid, 256]
+    P2, P3, P4, P5 = fpn(C2, C3, C4, C5)
+    feat_seg = solov2_maskhead(P2, P3, P4, P5)  # [B, h/4, w/4, 256]
+    feat_cls_list, feat_kernel_list = solov2_head(P2, P3, P4, P5, num_classes=num_classes)  # [B, grid, grid, 80], [B, grid, grid, 256]
     model = tf.keras.Model(inputs=inputs, outputs=[feat_seg, feat_cls_list, feat_kernel_list])
     return model
+
+
+def get_estimator(data_dir):
+    train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
+    pipeline = fe.Pipeline()
+    pdb.set_trace()
 
 
 if __name__ == "__main__":
