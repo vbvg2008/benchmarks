@@ -1,10 +1,30 @@
+"""
+pip install paddlepaddle
+clone paddledetection: git clone https://github.com/PaddlePaddle/PaddleDetection.git
+pip install -r requirements.txt
+cd PaddleDetection
+python setup.py install
+pip install
+python ppdet/modeling/tests/test_architectures.py
+python tools/train.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
+"""
+
+import json
 import pdb
+from re import S
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-from fastestimator.dataset.data import mscoco
+from scipy.ndimage.measurements import center_of_mass
 from tensorflow.keras import layers
+
+import fastestimator as fe
+from fastestimator.dataset.data import mscoco
+from fastestimator.op.numpyop import Delete, NumpyOp
+from fastestimator.op.numpyop.meta import Sometimes
+from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, Resize
+from fastestimator.op.numpyop.univariate import Normalize, ReadImage
 
 
 def fpn(C2, C3, C4, C5):
@@ -27,15 +47,15 @@ def fpn(C2, C3, C4, C5):
     return P2, P3, P4, P5
 
 
-def pad_with_coord(inputs):
-    batch_size, height, width, _ = tf.shape(inputs)
-    x_ranges = tf.cast(tf.linspace(-1, 1, num=width), inputs.dtype)
-    y_ranges = tf.cast(tf.linspace(-1, 1, num=height), inputs.dtype)
-    X, Y = tf.meshgrid(x_ranges, y_ranges)
-    X = tf.tile(X[tf.newaxis, ..., tf.newaxis], [batch_size, 1, 1, 1])
-    Y = tf.tile(Y[tf.newaxis, ..., tf.newaxis], [batch_size, 1, 1, 1])
-    outputs = tf.concat([inputs, X, Y], axis=-1)
-    return outputs
+def pad_with_coord(data):
+    data_shape = tf.shape(data)
+    batch_size, height, width = data_shape[0], data_shape[1], data_shape[2]
+    x = tf.cast(tf.linspace(-1, 1, num=width), data.dtype)
+    x = tf.tile(x[tf.newaxis, tf.newaxis, ..., tf.newaxis], [batch_size, height, 1, 1])
+    y = tf.cast(tf.linspace(-1, 1, num=height), data.dtype)
+    y = tf.tile(y[tf.newaxis, ..., tf.newaxis, tf.newaxis], [batch_size, 1, width, 1])
+    data = tf.concat([data, x, y], axis=-1)
+    return data
 
 
 def conv_norm(x, filters, kernel_size=3, groups=32):
@@ -91,8 +111,7 @@ def solov2_maskhead(P2, P3, P4, P5, mid_ch=128, out_ch=256):
     P4 = tf.nn.relu(conv_norm(P4, filters=mid_ch))
     P4 = layers.UpSampling2D()(P4)
     # top level, add coordinate
-    P5 = pad_with_coord(P5)
-    P5 = tf.nn.relu(conv_norm(P5, filters=mid_ch))
+    P5 = tf.nn.relu(conv_norm(pad_with_coord(P5), filters=mid_ch))
     P5 = layers.UpSampling2D()(P5)
     P5 = tf.nn.relu(conv_norm(P5, filters=mid_ch))
     P5 = layers.UpSampling2D()(P5)
@@ -120,10 +139,118 @@ def solov2(input_shape=(None, None, 3), num_classes=80):
     return model
 
 
+class MergeMask(NumpyOp):
+    def forward(self, data, state):
+        data = np.stack(data, axis=-1)
+        return data
+
+
+class CategoryID2ClassID(NumpyOp):
+    def __init__(self, inputs, outputs, mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        missing_category = [66, 68, 69, 71, 12, 45, 83, 26, 29, 30]
+        category = [x for x in range(1, 91) if not x in missing_category]
+        self.mapping = {k: v for k, v in zip(category, list(range(80)))}
+
+    def forward(self, data, state):
+        classes = np.array([self.mapping[x[-1]] for x in data], dtype=np.int32)
+        return classes
+
+
+class Gt2Target(NumpyOp):
+    def __init__(self,
+                 inputs,
+                 outputs,
+                 mode=None,
+                 im_size=1024,
+                 num_grids=[40, 36, 24, 16, 12],
+                 scale_ranges=[[1, 96], [48, 192], [96, 384], [192, 768], [384, 2048]],
+                 coord_sigma=0.05,
+                 sampling_ratio=4.0):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.im_size = im_size
+        self.num_grids = num_grids
+        self.scale_ranges = scale_ranges
+        self.coord_sigma = coord_sigma
+        self.sampling_ratio = sampling_ratio
+        missing_category = [66, 68, 69, 71, 12, 45, 83, 26, 29, 30]
+        category = [x for x in range(1, 91) if not x in missing_category]
+        self.mapping = {k: v for k, v in zip(category, list(range(80)))}
+        self.mask_size = int(im_size / sampling_ratio)
+
+    def forward(self, data, state):
+        masks, bboxes = data
+        bboxes = np.array(bboxes, dtype="float32")
+        masks = np.transpose(masks, [2, 0, 1])  # (H, W, #objects) -> (#objects, H, W)
+        masks, bboxes = self.remove_empty_gt(masks, bboxes)
+        classes = np.array([self.mapping[int(x[-1])] + 1 for x in bboxes], dtype=np.int32)  # 91 classes -> 80 classes
+        widths, heights = bboxes[:, 2], bboxes[:, 3]
+        gt_match = []  # number of objects x (grid_idx, height_idx, width_idx, exist)
+        for width, height, mask in zip(widths, heights, masks):
+            object_match = []
+            object_scale = np.sqrt(width * height)
+            center_h, center_w = center_of_mass(mask)
+            for grid_idx, ((lower_scale, upper_scale), num_grid) in enumerate(zip(self.scale_ranges, self.num_grids)):
+                grid_matched = (object_scale >= lower_scale) & (object_scale <= upper_scale)
+                if grid_matched:
+                    w_delta, h_delta = 0.5 * width * self.coord_sigma, 0.5 * height * self.coord_sigma
+                    coord_h, coord_w = int(center_h / mask.shape[0] * num_grid), int(center_w / mask.shape[1] * num_grid)
+                    # each object will have some additional area of effect
+                    top_box_extend = max(0, int((center_h - h_delta) / mask.shape[0] * num_grid))
+                    down_box_extend = min(num_grid - 1, int((center_h + h_delta) / mask.shape[0] * num_grid))
+                    left_box_extend = max(0, int((center_w - w_delta) / mask.shape[1] * num_grid))
+                    right_box_extend = min(num_grid - 1, int((center_w + w_delta) / mask.shape[0] * num_grid))
+                    # make sure the additional area of effect is at most 1 grid more
+                    top_box_extend = max(top_box_extend, coord_h - 1)
+                    down_box_extend = min(down_box_extend, coord_h + 1)
+                    left_box_extend = max(left_box_extend, coord_w - 1)
+                    right_box_extend = min(right_box_extend, coord_w + 1)
+                    object_match.extend([(grid_idx, y, x, 1) for y in range(top_box_extend, down_box_extend + 1)
+                                         for x in range(left_box_extend, right_box_extend + 1)])
+            gt_match.append(object_match)
+        gt_match = self.pad_match(gt_match)
+        return gt_match, masks, classes
+
+    def pad_match(self, gt_match):
+        max_num_matches = max([len(match) for match in gt_match])
+        for match in gt_match:
+            match.extend([(0, 0, 0, 0) for _ in range(max_num_matches - len(match))])
+        return np.array(gt_match, dtype="int32")
+
+    def remove_empty_gt(self, masks, bboxes):
+        num_objects = masks.shape[0]
+        non_empty_mask = np.sum(masks.reshape(num_objects, -1), axis=1) > 0
+        return masks[non_empty_mask], bboxes[non_empty_mask]
+
+
 def get_estimator(data_dir):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
-    pipeline = fe.Pipeline()
-    pdb.set_trace()
+    pipeline = fe.Pipeline(
+        train_data=train_ds,
+        eval_data=val_ds,
+        batch_size=8,
+        ops=[
+            ReadImage(inputs="image", outputs="image"),
+            MergeMask(inputs="mask", outputs="mask"),
+            LongestMaxSize(max_size=1024, image_in="image", mask_in="mask", bbox_in="bbox", bbox_params="coco"),
+            PadIfNeeded(min_height=1024,
+                        min_width=1024,
+                        image_in="image",
+                        mask_in="mask",
+                        bbox_in="bbox",
+                        bbox_params="coco"),
+            Sometimes(HorizontalFlip(image_in="image", mask_in="mask", bbox_in="bbox", bbox_params="coco",
+                                     mode="train")),
+            Resize(height=256, width=256, image_in='mask'),  # downscale mask by 1/4 for memory efficiency
+            Gt2Target(inputs=("mask", "bbox"), outputs=("gt_match", "mask", "classes")),
+            # Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # gpu
+            Delete(keys=("bbox", "image_id"))
+        ],
+        pad_value=0,
+        num_process=0)
+    data = pipeline.get_results(shuffle=True)
+    for key, val in data.items():
+        np.save("{}.npy".format(key), val.numpy())
 
 
 if __name__ == "__main__":
