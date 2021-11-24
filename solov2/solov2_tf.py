@@ -238,7 +238,9 @@ def get_estimator(data_dir):
                         image_in="image",
                         mask_in="mask",
                         bbox_in="bbox",
-                        bbox_params="coco"),
+                        bbox_params="coco",
+                        border_mode=cv2.BORDER_CONSTANT,
+                        value=0),
             Sometimes(HorizontalFlip(image_in="image", mask_in="mask", bbox_in="bbox", bbox_params="coco",
                                      mode="train")),
             Resize(height=256, width=256, image_in='mask'),  # downscale mask by 1/4 for memory efficiency
