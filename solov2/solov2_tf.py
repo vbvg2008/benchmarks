@@ -8,11 +8,9 @@ pip install
 python ppdet/modeling/tests/test_architectures.py
 python tools/train.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
 """
-
-import json
 import pdb
-from re import S
 
+import cv2
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -24,7 +22,9 @@ from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, Resize
-from fastestimator.op.numpyop.univariate import Normalize, ReadImage
+from fastestimator.op.numpyop.univariate import ReadImage
+from fastestimator.op.tensorop.model import ModelOp
+from fastestimator.op.tensorop.tensorop import TensorOp
 
 
 def fpn(C2, C3, C4, C5):
@@ -223,12 +223,29 @@ class Gt2Target(NumpyOp):
         return masks[non_empty_mask], bboxes[non_empty_mask]
 
 
+class Normalize(TensorOp):
+    def __init__(self, inputs, outputs, mean, std, mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.mean = tf.convert_to_tensor(mean)
+        self.std = tf.convert_to_tensor(std)
+
+    def forward(self, data, state):
+        data = (data / 255 - self.mean) / self.std
+        return data
+
+
+class Solov2Loss(TensorOp):
+    def forward(self, data, state):
+        masks, classes, gt_match, feat_seg, feat_cls_list, feat_kernel_list = data
+        pdb.set_trace()
+
+
 def get_estimator(data_dir):
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     pipeline = fe.Pipeline(
         train_data=train_ds,
         eval_data=val_ds,
-        batch_size=8,
+        batch_size=4,
         ops=[
             ReadImage(inputs="image", outputs="image"),
             MergeMask(inputs="mask", outputs="mask"),
@@ -245,18 +262,15 @@ def get_estimator(data_dir):
                                      mode="train")),
             Resize(height=256, width=256, image_in='mask'),  # downscale mask by 1/4 for memory efficiency
             Gt2Target(inputs=("mask", "bbox"), outputs=("gt_match", "mask", "classes")),
-            # Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # gpu
             Delete(keys=("bbox", "image_id"))
         ],
-        pad_value=0,
-        num_process=0)
-    data = pipeline.get_results(shuffle=True)
-    for key, val in data.items():
-        np.save("{}.npy".format(key), val.numpy())
-
-
-if __name__ == "__main__":
-    model = solov2(input_shape=(1024, 1024, 3))
-    x = tf.ones([2, 1024, 1024, 3])
-    feat_seg, feat_cls_list, feat_kernel_list = model(x)
-    pdb.set_trace()
+        pad_value=0)
+    model = fe.build(model_fn=lambda: solov2(input_shape=(1024, 1024, 3)), optimizer_fn="adam")
+    network = fe.Network(ops=[
+        Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
+        Solov2Loss(inputs=("mask", "classes", "gt_match", "feat_seg", "feat_cls_list", "feat_kernel_list"),
+                   outputs="loss")
+    ])
+    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=1)
+    return estimator
