@@ -23,8 +23,9 @@ from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, Resize
 from fastestimator.op.numpyop.univariate import ReadImage
-from fastestimator.op.tensorop.model import ModelOp
-from fastestimator.op.tensorop.tensorop import TensorOp
+from fastestimator.op.tensorop import Average
+from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.op.tensorop.tensorop import LambdaOp, TensorOp
 
 
 def fpn(C2, C3, C4, C5):
@@ -183,7 +184,8 @@ class Gt2Target(NumpyOp):
         bboxes = np.array(bboxes, dtype="float32")
         masks = np.transpose(masks, [2, 0, 1])  # (H, W, #objects) -> (#objects, H, W)
         masks, bboxes = self.remove_empty_gt(masks, bboxes)
-        classes = np.array([self.mapping[int(x[-1])] + 1 for x in bboxes], dtype=np.int32)  # 91 classes -> 80 classes
+        # 91 classes -> 80 classes that starts from 1
+        classes = np.array([self.mapping[int(x[-1])] + 1 for x in bboxes], dtype=np.int32)
         widths, heights = bboxes[:, 2], bboxes[:, 3]
         gt_match = []  # number of objects x (grid_idx, height_idx, width_idx, exist)
         for width, height, mask in zip(widths, heights, masks):
@@ -208,7 +210,7 @@ class Gt2Target(NumpyOp):
                     object_match.extend([(grid_idx, y, x, 1) for y in range(top_box_extend, down_box_extend + 1)
                                          for x in range(left_box_extend, right_box_extend + 1)])
             gt_match.append(object_match)
-        gt_match = self.pad_match(gt_match)
+        gt_match = self.pad_match(gt_match)  #num_object x num_matches x [grid_idx, heihght_idx, width_idx, exist]
         return gt_match, masks, classes
 
     def pad_match(self, gt_match):
@@ -235,9 +237,59 @@ class Normalize(TensorOp):
 
 
 class Solov2Loss(TensorOp):
+    def __init__(self, level, grid_dim, inputs, outputs, mode=None, num_class=80):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.level = level
+        self.grid_dim = grid_dim
+        self.num_class = num_class
+
     def forward(self, data, state):
-        masks, classes, gt_match, feat_seg, feat_cls_list, feat_kernel_list = data
+        masks, classes, gt_match, feat_segs, feat_clss, kernels = data
+        cls_loss, grid_object_maps = tf.map_fn(fn=lambda x: self.get_cls_loss(x[0], x[1], x[2]),
+                             elems=(classes, feat_clss, gt_match),
+                             fn_output_signature=(tf.float32, tf.float32))
+        # seg_loss = tf.map_fn(fn=lambda x: self.get_seg_loss(x[0], x[1], x[2], x[3], x[4]),
+        #                      elems=(classes, masks, feat_segs, kernels, gt_match),
+        #                      fn_output_signature=tf.float32)
+        seg_loss = []
+        batch_size = classes.shape[0]
+        for idx in range(batch_size):
+            seg_loss.append(self.get_seg_loss(masks[idx], feat_segs[idx], kernels[idx], grid_object_maps[idx]))
+        return tf.reduce_mean(cls_loss)
+
+    def get_seg_loss(self, mask, feat_seg, kernel, grid_object_map):
         pdb.set_trace()
+        indices = tf.where(grid_object_map[..., 0] > 0)
+        object_indices = tf.cast(tf.gather_nd(grid_object_map, indices)[:, 1], tf.int32)
+        mask_gt = tf.gather(mask, object_indices)
+        active_kernel = tf.gather_nd(kernel, indices)
+        mask_pred = tf.matmul(active_kernel, feat_seg)
+        coord_label = tf.concat(
+            [tf.gather_nd(match, indices)[:, 1:3], tf.gather(cls_gt, indices[:, 0])[..., tf.newaxis]], axis=-1)
+
+    def get_cls_loss(self, cls_gt, feat_cls, match):
+        cls_gt = tf.cast(cls_gt, feat_cls.dtype)
+        match, cls_gt = match[cls_gt > 0], cls_gt[cls_gt > 0]  # remove the padded object
+        feat_cls_gts_raw = tf.map_fn(fn=lambda x: self.assign_cls_feat(x[0], x[1]),
+                                     elems=(match, cls_gt),
+                                     fn_output_signature=tf.float32)
+        # TODO: if there are multiple objects overlapping on same grid point, randomly choose one
+        # reduce the gt for all objects into single grid
+        feat_cls_gts = tf.reduce_max(feat_cls_gts_raw, axis=0)
+        object_idx = tf.cast(tf.math.argmax(feat_cls_gts_raw, axis=0), feat_cls_gts.dtype)
+        grid_object_map = tf.stack([feat_cls_gts, object_idx], axis=-1)
+        # classification loss
+        feat_cls_gts = tf.one_hot(tf.cast(feat_cls_gts, tf.int32), depth=self.num_class + 1)[..., 1:]
+        loss = tf.losses.BinaryCrossentropy(reduction='sum')(feat_cls_gts, tf.sigmoid(feat_cls))
+        return loss, grid_object_map
+
+    def assign_cls_feat(self, grid_match_info, cls_gt_obj):
+        match_bool = tf.logical_and(tf.reduce_sum(grid_match_info, axis=-1) > 0, grid_match_info[:, 0] == self.level)
+        grid_match_info = grid_match_info[match_bool]
+        grid_indices = grid_match_info[:, 1:3]
+        num_indices = tf.shape(grid_indices)[0]
+        feat_cls_gt = tf.scatter_nd(grid_indices, tf.fill([num_indices], cls_gt_obj), (self.grid_dim, self.grid_dim))
+        return feat_cls_gt
 
 
 def get_estimator(data_dir):
@@ -269,8 +321,15 @@ def get_estimator(data_dir):
     network = fe.Network(ops=[
         Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
-        Solov2Loss(inputs=("mask", "classes", "gt_match", "feat_seg", "feat_cls_list", "feat_kernel_list"),
-                   outputs="loss")
+        LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
+        LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
+        Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs="loss1"),
+        Solov2Loss(1, 36, inputs=("mask", "classes", "gt_match", "feat_seg", "cls2", "k2"), outputs="loss2"),
+        Solov2Loss(2, 24, inputs=("mask", "classes", "gt_match", "feat_seg", "cls3", "k3"), outputs="loss3"),
+        Solov2Loss(3, 16, inputs=("mask", "classes", "gt_match", "feat_seg", "cls4", "k4"), outputs="loss4"),
+        Solov2Loss(4, 12, inputs=("mask", "classes", "gt_match", "feat_seg", "cls5", "k5"), outputs="loss5"),
+        Average(inputs=("loss1", "loss2", "loss3", "loss4", "loss5"), outputs="total_loss"),
+        UpdateOp(model=model, loss_name="total_loss")
     ])
     estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=1)
     return estimator
