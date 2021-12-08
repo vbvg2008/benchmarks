@@ -7,15 +7,18 @@ python setup.py install
 pip install
 python ppdet/modeling/tests/test_architectures.py
 python tools/train.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
+python tools/eval.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
 """
 import pdb
+import tempfile
 
 import cv2
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
+from albumentations.augmentations.functional import pad
 from scipy.ndimage.measurements import center_of_mass
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 
 import fastestimator as fe
 from fastestimator.dataset.data import mscoco
@@ -23,28 +26,59 @@ from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
 from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize, PadIfNeeded, Resize
 from fastestimator.op.numpyop.univariate import ReadImage
-from fastestimator.op.tensorop import Average
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.op.tensorop.tensorop import LambdaOp, TensorOp
+from fastestimator.schedule import EpochScheduler
+from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver
+from fastestimator.util import get_num_devices
 
 
 def fpn(C2, C3, C4, C5):
     # lateral conv
-    P5 = layers.Conv2D(256, kernel_size=1)(C5)
+    P5 = layers.Conv2D(256,
+                       kernel_size=1,
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(C5)
     P5_up = layers.UpSampling2D()(P5)
-    P4 = layers.Conv2D(256, kernel_size=1)(C4)
+    P4 = layers.Conv2D(256,
+                       kernel_size=1,
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(C4)
     P4 = P4 + P5_up
     P4_up = layers.UpSampling2D()(P4)
-    P3 = layers.Conv2D(256, kernel_size=1)(C3)
+    P3 = layers.Conv2D(256,
+                       kernel_size=1,
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(C3)
     P3 = P3 + P4_up
     P3_up = layers.UpSampling2D()(P3)
-    P2 = layers.Conv2D(256, kernel_size=1)(C2)
+    P2 = layers.Conv2D(256,
+                       kernel_size=1,
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(C2)
     P2 = P2 + P3_up
     # fpn conv
-    P5 = layers.Conv2D(256, kernel_size=3, padding="same")(P5)
-    P4 = layers.Conv2D(256, kernel_size=3, padding="same")(P4)
-    P3 = layers.Conv2D(256, kernel_size=3, padding="same")(P3)
-    P2 = layers.Conv2D(256, kernel_size=3, padding="same")(P2)
+    P5 = layers.Conv2D(256,
+                       kernel_size=3,
+                       padding="same",
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(P5)
+    P4 = layers.Conv2D(256,
+                       kernel_size=3,
+                       padding="same",
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(P4)
+    P3 = layers.Conv2D(256,
+                       kernel_size=3,
+                       padding="same",
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(P3)
+    P2 = layers.Conv2D(256,
+                       kernel_size=3,
+                       padding="same",
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       bias_regularizer=regularizers.l2(0.0001))(P2)
     return P2, P3, P4, P5
 
 
@@ -60,7 +94,11 @@ def pad_with_coord(data):
 
 
 def conv_norm(x, filters, kernel_size=3, groups=32):
-    x = layers.Conv2D(filters=filters, kernel_size=kernel_size, padding='same', use_bias=False)(x)
+    x = layers.Conv2D(filters=filters,
+                      kernel_size=kernel_size,
+                      padding='same',
+                      use_bias=False,
+                      kernel_regularizer=regularizers.l2(0.0001))(x)
     x = tfa.layers.GroupNormalization(groups=groups, epsilon=1e-5)(x)
     return x
 
@@ -75,12 +113,16 @@ def solov2_head_model(stacked_convs=4, ch_in=258, ch_feature=512, ch_kernel_out=
     feature_kernel = layers.Conv2D(filters=ch_kernel_out,
                                    kernel_size=3,
                                    padding='same',
-                                   kernel_initializer=tf.random_normal_initializer(stddev=0.01))(feature_kernel)
+                                   kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                                   kernel_regularizer=regularizers.l2(0.0001),
+                                   bias_regularizer=regularizers.l2(0.0001))(feature_kernel)
     feature_cls = layers.Conv2D(filters=num_classes,
                                 kernel_size=3,
                                 padding='same',
                                 kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-                                bias_initializer=tf.initializers.constant(np.log(1 / 99)))(feature_cls)
+                                bias_initializer=tf.initializers.constant(np.log(1 / 99)),
+                                kernel_regularizer=regularizers.l2(0.0001),
+                                bias_regularizer=regularizers.l2(0.0001))(feature_cls)
     return tf.keras.Model(inputs=inputs, outputs=[feature_kernel, feature_cls])
 
 
@@ -248,24 +290,29 @@ class Solov2Loss(TensorOp):
         cls_loss, grid_object_maps = tf.map_fn(fn=lambda x: self.get_cls_loss(x[0], x[1], x[2]),
                              elems=(classes, feat_clss, gt_match),
                              fn_output_signature=(tf.float32, tf.float32))
-        # seg_loss = tf.map_fn(fn=lambda x: self.get_seg_loss(x[0], x[1], x[2], x[3], x[4]),
-        #                      elems=(classes, masks, feat_segs, kernels, gt_match),
-        #                      fn_output_signature=tf.float32)
-        seg_loss = []
-        batch_size = classes.shape[0]
-        for idx in range(batch_size):
-            seg_loss.append(self.get_seg_loss(masks[idx], feat_segs[idx], kernels[idx], grid_object_maps[idx]))
-        return tf.reduce_mean(cls_loss)
+        seg_loss = tf.map_fn(fn=lambda x: self.get_seg_loss(x[0], x[1], x[2], x[3]),
+                             elems=(masks, feat_segs, kernels, grid_object_maps),
+                             fn_output_signature=tf.float32)
+        return cls_loss, seg_loss
 
     def get_seg_loss(self, mask, feat_seg, kernel, grid_object_map):
-        pdb.set_trace()
         indices = tf.where(grid_object_map[..., 0] > 0)
         object_indices = tf.cast(tf.gather_nd(grid_object_map, indices)[:, 1], tf.int32)
-        mask_gt = tf.gather(mask, object_indices)
+        mask_gt = tf.cast(tf.gather(mask, object_indices), kernel.dtype)
         active_kernel = tf.gather_nd(kernel, indices)
-        mask_pred = tf.matmul(active_kernel, feat_seg)
-        coord_label = tf.concat(
-            [tf.gather_nd(match, indices)[:, 1:3], tf.gather(cls_gt, indices[:, 0])[..., tf.newaxis]], axis=-1)
+        feat_seg = tf.reshape(tf.transpose(feat_seg, perm=[2, 0, 1]),
+                              (tf.shape(kernel)[-1], -1))  # H/4,W/4,C->C,H/4,W/4
+        seg_preds = tf.reshape(tf.matmul(active_kernel, feat_seg), tf.shape(mask_gt))
+        loss = self.dice_loss(seg_preds, mask_gt)
+        return loss
+
+    def dice_loss(self, pred, gt):
+        pred = tf.sigmoid(pred)
+        a = tf.reduce_sum(pred * gt)
+        b = tf.reduce_sum(pred * pred) + 0.001
+        c = tf.reduce_sum(gt * gt) + 0.001
+        dice = (2 * a) / (b + c)
+        return 1 - tf.where(dice > 0, dice, 1)
 
     def get_cls_loss(self, cls_gt, feat_cls, match):
         cls_gt = tf.cast(cls_gt, feat_cls.dtype)
@@ -273,15 +320,25 @@ class Solov2Loss(TensorOp):
         feat_cls_gts_raw = tf.map_fn(fn=lambda x: self.assign_cls_feat(x[0], x[1]),
                                      elems=(match, cls_gt),
                                      fn_output_signature=tf.float32)
-        # TODO: if there are multiple objects overlapping on same grid point, randomly choose one
         # reduce the gt for all objects into single grid
+        # TODO: if there are multiple objects overlapping on same grid point, randomly choose one
         feat_cls_gts = tf.reduce_max(feat_cls_gts_raw, axis=0)
         object_idx = tf.cast(tf.math.argmax(feat_cls_gts_raw, axis=0), feat_cls_gts.dtype)
         grid_object_map = tf.stack([feat_cls_gts, object_idx], axis=-1)
         # classification loss
         feat_cls_gts = tf.one_hot(tf.cast(feat_cls_gts, tf.int32), depth=self.num_class + 1)[..., 1:]
-        loss = tf.losses.BinaryCrossentropy(reduction='sum')(feat_cls_gts, tf.sigmoid(feat_cls))
-        return loss, grid_object_map
+        cls_loss = self.focal_loss(tf.sigmoid(feat_cls), feat_cls_gts)
+        return cls_loss, grid_object_map
+
+    def focal_loss(self, pred, gt, alpha=0.25, gamma=2.0):
+        pred, gt = tf.reshape(pred, (-1, 1)), tf.reshape(gt, (-1, 1))
+        anchor_obj_count = tf.cast(tf.math.count_nonzero(gt), pred.dtype)
+        alpha_factor = tf.ones_like(gt) * alpha
+        alpha_factor = tf.where(tf.equal(gt, 1), alpha_factor, 1 - alpha_factor)
+        focal_weight = tf.where(tf.equal(gt, 1), 1 - pred, pred)
+        focal_weight = alpha_factor * focal_weight**gamma / (anchor_obj_count + 1)
+        cls_loss = tf.losses.BinaryCrossentropy(reduction='sum')(gt, pred, sample_weight=focal_weight)
+        return cls_loss
 
     def assign_cls_feat(self, grid_match_info, cls_gt_obj):
         match_bool = tf.logical_and(tf.reduce_sum(grid_match_info, axis=-1) > 0, grid_match_info[:, 0] == self.level)
@@ -292,12 +349,99 @@ class Solov2Loss(TensorOp):
         return feat_cls_gt
 
 
-def get_estimator(data_dir):
+class CombineLoss(TensorOp):
+    def forward(self, data, state):
+        l_c1, l_s1, l_c2, l_s2, l_c3, l_s3, l_c4, l_s4, l_c5, l_s5 = data
+        cls_losses = tf.reduce_sum(tf.stack([l_c1, l_c2, l_c3, l_c4, l_c5], axis=-1), axis=-1)
+        seg_losses = tf.reduce_sum(tf.stack([l_s1, l_s2, l_s3, l_s4, l_s5], axis=-1), axis=-1)
+        mean_cls_loss, mean_seg_loss = tf.reduce_mean(cls_losses), tf.reduce_mean(seg_losses) * 3
+        return mean_cls_loss + mean_seg_loss, mean_cls_loss, mean_seg_loss
+
+
+class PointsNMS(TensorOp):
+    def forward(self, data, state):
+        feat_cls_list = [self.points_nms(tf.sigmoid(x)) for x in data]
+        return feat_cls_list
+
+    def points_nms(self, x, kernel_size=2):
+        x_max_pool = tf.nn.max_pool2d(x, ksize=2, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]])[:, :-1, :-1, :]
+        x = tf.where(tf.equal(x, x_max_pool), x, 0)
+        return x
+
+
+class Predict(TensorOp):
+    def __init__(self, inputs, outputs, mode=None, score_threshold=0.1, segm_strides=[8.0, 8.0, 16.0, 32.0, 32.0]):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.score_threshold = score_threshold
+        self.segm_strides = segm_strides
+
+    def forward(self, data, state):
+        feat_seg, feat_cls_list, feat_kernel_list = data
+        batch_size, _, _, num_class = tf.shape(feat_cls_list[0])
+        kernel_dim = tf.shape(feat_kernel_list[0])[-1]
+        feat_cls = tf.concat([tf.reshape(x, (batch_size, -1, num_class)) for x in feat_cls_list], axis=1)
+        feat_kernel = tf.concat([tf.reshape(x, (batch_size, -1, kernel_dim)) for x in feat_kernel_list], axis=1)
+        strides = tf.concat(
+            [tf.fill(tf.shape(x)[1] * tf.shape(x)[2], stride) for stride, x in zip(self.segm_strides, feat_cls_list)],
+            axis=0)
+        seg_masks, cate_labels, cate_scores = self.predict_sample(feat_cls[0], feat_seg[0], feat_kernel[0], strides)
+
+    def predict_sample(self, cate_preds, seg_preds, kernel_preds, strides):
+        # first filter class prediction by score_threshold
+        select_indices = tf.where(cate_preds > self.score_threshold)
+        cate_labels = select_indices[:, 1]
+        kernel_preds = tf.gather(kernel_preds, select_indices[:, 0])
+        cate_scores = tf.gather_nd(cate_preds, select_indices)
+        strides = tf.gather(strides, select_indices[:, 0])
+        # next calculate the mask
+        kernel_preds = tf.transpose(kernel_preds)[tf.newaxis, tf.newaxis, ...]  # [k_h, k_w, c_in, c_out]
+        seg_preds = tf.sigmoid(tf.nn.conv2d(seg_preds[tf.newaxis, ...], kernel_preds, strides=1, padding="VALID"))[0]
+        seg_preds = tf.transpose(seg_preds, perm=[2, 0, 1])  # [C, H, W]
+        seg_masks = tf.where(seg_preds > 0.5, 1.0, 0.0)
+        # then filter masks based on strides
+        mask_sum = tf.reduce_sum(seg_masks, axis=[1, 2])
+        select_indices = tf.where(mask_sum > strides)[:, 0]
+        seg_preds, seg_masks = tf.gather(seg_preds, select_indices), tf.gather(seg_masks, select_indices)
+        mask_sum = tf.gather(mask_sum, select_indices)
+        cate_labels, cate_scores = tf.gather(cate_labels, select_indices), tf.gather(cate_scores, select_indices)
+        # scale the category score by mask confidence
+        mask_scores = tf.reduce_sum(seg_preds * seg_masks, axis=[1, 2]) / mask_sum
+        cate_scores = cate_scores * mask_scores
+        # matrix nms
+        seg_preds, cate_scores, cate_labels = self.matrix_nms(seg_preds, seg_masks, cate_labels, cate_scores, mask_sum)
+        return seg_masks, cate_labels, cate_scores
+
+    def matrix_nms(self, seg_preds, seg_masks, cate_labels, cate_scores, mask_sum):
+        pdb.set_trace()
+        return seg_masks, cate_labels, cate_scores
+
+
+def lr_schedule_warmup(step, init_lr):
+    if step < 1000:
+        lr = init_lr / 1000 * step
+    else:
+        lr = init_lr
+    return lr
+
+
+def lr_schedule_piece_wise(epoch, init_lr):
+    if epoch < 8:
+        lr = init_lr
+    elif epoch < 11:
+        lr = init_lr * 0.1
+    else:
+        lr = init_lr * 0.01
+    return lr
+
+
+def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
+    num_device = get_num_devices()
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
+    batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
-        train_data=train_ds,
+        # train_data=train_ds,
         eval_data=val_ds,
-        batch_size=4,
+        batch_size=num_device * batch_size_per_gpu,
         ops=[
             ReadImage(inputs="image", outputs="image"),
             MergeMask(inputs="mask", outputs="mask"),
@@ -316,20 +460,36 @@ def get_estimator(data_dir):
             Gt2Target(inputs=("mask", "bbox"), outputs=("gt_match", "mask", "classes")),
             Delete(keys=("bbox", "image_id"))
         ],
-        pad_value=0)
-    model = fe.build(model_fn=lambda: solov2(input_shape=(1024, 1024, 3)), optimizer_fn="adam")
+        pad_value=0,
+        num_process=8 * num_device)
+    init_lr = 1e-2 / 16 * batch_size
+    model = fe.build(model_fn=lambda: solov2(input_shape=(1024, 1024, 3)),
+                     optimizer_fn=lambda: tf.optimizers.SGD(learning_rate=init_lr, momentum=0.9),
+                     weights_path="/raid/xiaomeng/Experiments/solov2/1_initial_run/save_dir/model_best_total_loss.h5")
     network = fe.Network(ops=[
         Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
+        PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="!train"),
+        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"), outputs=("mask", "cls"), mode="!train"),
         LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
         LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
-        Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs="loss1"),
-        Solov2Loss(1, 36, inputs=("mask", "classes", "gt_match", "feat_seg", "cls2", "k2"), outputs="loss2"),
-        Solov2Loss(2, 24, inputs=("mask", "classes", "gt_match", "feat_seg", "cls3", "k3"), outputs="loss3"),
-        Solov2Loss(3, 16, inputs=("mask", "classes", "gt_match", "feat_seg", "cls4", "k4"), outputs="loss4"),
-        Solov2Loss(4, 12, inputs=("mask", "classes", "gt_match", "feat_seg", "cls5", "k5"), outputs="loss5"),
-        Average(inputs=("loss1", "loss2", "loss3", "loss4", "loss5"), outputs="total_loss"),
+        Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs=("l_c1", "l_s1")),
+        Solov2Loss(1, 36, inputs=("mask", "classes", "gt_match", "feat_seg", "cls2", "k2"), outputs=("l_c2", "l_s2")),
+        Solov2Loss(2, 24, inputs=("mask", "classes", "gt_match", "feat_seg", "cls3", "k3"), outputs=("l_c3", "l_s3")),
+        Solov2Loss(3, 16, inputs=("mask", "classes", "gt_match", "feat_seg", "cls4", "k4"), outputs=("l_c4", "l_s4")),
+        Solov2Loss(4, 12, inputs=("mask", "classes", "gt_match", "feat_seg", "cls5", "k5"), outputs=("l_c5", "l_s5")),
+        CombineLoss(inputs=("l_c1", "l_s1", "l_c2", "l_s2", "l_c3", "l_s3", "l_c4", "l_s4", "l_c5", "l_s5"),
+                    outputs=("total_loss", "cls_loss", "seg_loss")),
         UpdateOp(model=model, loss_name="total_loss")
     ])
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=1)
+    lr_schedule = {
+        1: LRScheduler(model=model, lr_fn=lambda step: lr_schedule_warmup(step, init_lr=init_lr)),
+        2: LRScheduler(model=model, lr_fn=lambda epoch: lr_schedule_piece_wise(epoch, init_lr=init_lr))
+    }
+    traces = [EpochScheduler(lr_schedule), BestModelSaver(model=model, save_dir=save_dir)]
+    estimator = fe.Estimator(pipeline=pipeline,
+                             network=network,
+                             epochs=epochs,
+                             traces=traces,
+                             monitor_names=("cls_loss", "seg_loss"))
     return estimator
