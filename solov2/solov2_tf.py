@@ -16,7 +16,6 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-from albumentations.augmentations.functional import pad
 from scipy.ndimage.measurements import center_of_mass
 from tensorflow.keras import layers, regularizers
 
@@ -31,6 +30,7 @@ from fastestimator.op.tensorop.tensorop import LambdaOp, TensorOp
 from fastestimator.schedule import EpochScheduler
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver
+from fastestimator.trace.trace import Trace
 from fastestimator.util import get_num_devices
 
 
@@ -377,19 +377,21 @@ class Predict(TensorOp):
 
     def forward(self, data, state):
         feat_seg, feat_cls_list, feat_kernel_list = data
-        batch_size, _, _, num_class = tf.shape(feat_cls_list[0])
+        strides = [tf.fill((tf.shape(x)[1] * tf.shape(x)[2], ), s) for s, x in zip(self.segm_strides, feat_cls_list)]
+        batch_size, num_class = tf.shape(feat_cls_list[0])[0], tf.shape(feat_cls_list[0])[3]
         kernel_dim = tf.shape(feat_kernel_list[0])[-1]
         feat_cls = tf.concat([tf.reshape(x, (batch_size, -1, num_class)) for x in feat_cls_list], axis=1)
         feat_kernel = tf.concat([tf.reshape(x, (batch_size, -1, kernel_dim)) for x in feat_kernel_list], axis=1)
-        strides = tf.concat(
-            [tf.fill(tf.shape(x)[1] * tf.shape(x)[2], stride) for stride, x in zip(self.segm_strides, feat_cls_list)],
-            axis=0)
-        seg_masks, cate_labels, cate_scores = self.predict_sample(feat_cls[0], feat_seg[0], feat_kernel[0], strides)
+        strides = tf.concat(strides, axis=0)
+        seg_preds, cate_scores, cate_labels  = tf.map_fn(fn=lambda x: self.predict_sample(x[0], x[1], x[2], strides),
+                             elems=(feat_cls, feat_seg, feat_kernel),
+                             fn_output_signature=(tf.float32, tf.float32, tf.int32))
+        return seg_preds, cate_scores, cate_labels
 
     def predict_sample(self, cate_preds, seg_preds, kernel_preds, strides):
         # first filter class prediction by score_threshold
         select_indices = tf.where(cate_preds > self.score_threshold)
-        cate_labels = select_indices[:, 1]
+        cate_labels = tf.cast(select_indices[:, 1], tf.int32)
         kernel_preds = tf.gather(kernel_preds, select_indices[:, 0])
         cate_scores = tf.gather_nd(cate_preds, select_indices)
         strides = tf.gather(strides, select_indices[:, 0])
@@ -404,16 +406,44 @@ class Predict(TensorOp):
         seg_preds, seg_masks = tf.gather(seg_preds, select_indices), tf.gather(seg_masks, select_indices)
         mask_sum = tf.gather(mask_sum, select_indices)
         cate_labels, cate_scores = tf.gather(cate_labels, select_indices), tf.gather(cate_scores, select_indices)
-        # scale the category score by mask confidence
+        # scale the category score by mask confidence then matrix nms
         mask_scores = tf.reduce_sum(seg_preds * seg_masks, axis=[1, 2]) / mask_sum
         cate_scores = cate_scores * mask_scores
-        # matrix nms
         seg_preds, cate_scores, cate_labels = self.matrix_nms(seg_preds, seg_masks, cate_labels, cate_scores, mask_sum)
-        return seg_masks, cate_labels, cate_scores
+        return seg_preds, cate_scores, cate_labels
 
-    def matrix_nms(self, seg_preds, seg_masks, cate_labels, cate_scores, mask_sum):
-        pdb.set_trace()
-        return seg_masks, cate_labels, cate_scores
+    def matrix_nms(self, seg_preds, seg_masks, cate_labels, cate_scores, mask_sum, pre_nms_k=500, post_nms_k=100):
+        # first select top k category scores
+        num_selected = tf.minimum(pre_nms_k, tf.shape(cate_scores)[0])
+        indices = tf.argsort(cate_scores, direction='DESCENDING')[:num_selected]
+        seg_preds, seg_masks = tf.gather(seg_preds, indices), tf.gather(seg_masks, indices)
+        cate_labels, cate_scores = tf.gather(cate_labels, indices), tf.gather(cate_scores, indices)
+        mask_sum = tf.gather(mask_sum, indices)
+        # calculate iou between different masks
+        seg_masks = tf.reshape(seg_masks, shape=(num_selected, -1))
+        intersection = tf.matmul(seg_masks, seg_masks, transpose_b=True)
+        mask_sum = tf.tile(mask_sum[tf.newaxis, ...], multiples=[num_selected, 1])
+        union = mask_sum + tf.transpose(mask_sum) - intersection
+        iou = intersection / union
+        iou = tf.linalg.band_part(iou, 0, -1) - tf.linalg.band_part(iou, 0, 0)  # equivalent of np.triu(diagonal=1)
+        # iou decay and compensation
+        labels_match = tf.tile(cate_labels[tf.newaxis, ...], multiples=[num_selected, 1])
+        labels_match = tf.where(labels_match == tf.transpose(labels_match), 1.0, 0.0)
+        labels_match = tf.linalg.band_part(labels_match, 0, -1) - tf.linalg.band_part(labels_match, 0, 0)
+        decay_iou = iou * labels_match  # iou with any object from same class
+        compensate_iou = tf.reduce_max(decay_iou, axis=0)
+        compensate_iou = tf.tile(compensate_iou[..., tf.newaxis], multiples=[1, num_selected])
+        # matrix nms
+        decay_coefficient = tf.reduce_min(tf.exp(-2 * decay_iou**2) / tf.exp(-2 * compensate_iou**2), axis=0)
+        cate_scores = cate_scores * decay_coefficient
+        cate_scores = tf.where(cate_scores >= 0.05, cate_scores, 0)
+        num_selected = tf.minimum(post_nms_k, tf.shape(cate_scores)[0])
+        # select the final predictions and pad output for batch shape consistency
+        indices = tf.argsort(cate_scores, direction='DESCENDING')[:num_selected]
+        seg_preds = tf.pad(tf.gather(seg_preds, indices), paddings=[[0, post_nms_k - num_selected], [0, 0], [0, 0]])
+        cate_scores = tf.pad(tf.gather(cate_scores, indices), paddings=[[0, post_nms_k - num_selected]])
+        cate_labels = tf.pad(tf.gather(cate_labels, indices), paddings=[[0, post_nms_k - num_selected]])
+        return seg_preds, cate_scores, cate_labels
 
 
 def lr_schedule_warmup(step, init_lr):
@@ -432,6 +462,16 @@ def lr_schedule_piece_wise(epoch, init_lr):
     else:
         lr = init_lr * 0.01
     return lr
+
+
+class DebugEval(Trace):
+    def on_batch_end(self, data):
+        seg_preds = data['seg_preds']
+        cate_scores = data['cate_scores']
+        cate_labels = data['cate_labels']
+        # there is a mismatch between labels and classes, need to consider that
+
+        return data
 
 
 def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
@@ -470,7 +510,9 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
         Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
         PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="!train"),
-        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"), outputs=("mask", "cls"), mode="!train"),
+        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
+                outputs=("seg_preds", "cate_scores", "cate_labels"),
+                mode="!train"),
         LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
         LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
         Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs=("l_c1", "l_s1")),
@@ -486,7 +528,11 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
         1: LRScheduler(model=model, lr_fn=lambda step: lr_schedule_warmup(step, init_lr=init_lr)),
         2: LRScheduler(model=model, lr_fn=lambda epoch: lr_schedule_piece_wise(epoch, init_lr=init_lr))
     }
-    traces = [EpochScheduler(lr_schedule), BestModelSaver(model=model, save_dir=save_dir)]
+    traces = [
+        EpochScheduler(lr_schedule),
+        BestModelSaver(model=model, save_dir=save_dir),
+        DebugEval(inputs=("seg_preds", "cate_scores", "cate_labels"), mode="eval")
+    ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
                              epochs=epochs,
