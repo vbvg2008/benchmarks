@@ -9,17 +9,16 @@ python ppdet/modeling/tests/test_architectures.py
 python tools/train.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
 python tools/eval.py -c configs/solov2/solov2_r50_fpn_1x_coco.yml
 """
+import os
 import pdb
 import tempfile
 
 import cv2
+import fastestimator as fe
 import numpy as np
+import pycocotools.mask as mask_util
 import tensorflow as tf
 import tensorflow_addons as tfa
-from scipy.ndimage.measurements import center_of_mass
-from tensorflow.keras import layers, regularizers
-
-import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -31,7 +30,11 @@ from fastestimator.schedule import EpochScheduler
 from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.trace import Trace
-from fastestimator.util import get_num_devices
+from fastestimator.util import Suppressor, get_num_devices
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+from scipy.ndimage.measurements import center_of_mass
+from tensorflow.keras import layers, regularizers
 
 
 def fpn(C2, C3, C4, C5):
@@ -186,6 +189,12 @@ class MergeMask(NumpyOp):
     def forward(self, data, state):
         data = np.stack(data, axis=-1)
         return data
+
+
+class GetImageSize(NumpyOp):
+    def forward(self, data, state):
+        height, width, _ = data.shape
+        return np.array([height, width], dtype="int32")
 
 
 class CategoryID2ClassID(NumpyOp):
@@ -464,27 +473,82 @@ def lr_schedule_piece_wise(epoch, init_lr):
     return lr
 
 
-class DebugEval(Trace):
-    def on_batch_end(self, data):
-        seg_preds = data['seg_preds']
-        cate_scores = data['cate_scores']
-        cate_labels = data['cate_labels']
-        # there is a mismatch between labels and classes, need to consider that
+class COCOMaskmAP(Trace):
+    def __init__(self, data_dir, inputs=None, outputs="mAP", mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        with Suppressor():
+            self.coco_gt = COCO(os.path.join(data_dir, "MSCOCO2017", "annotations", "instances_val2017.json"))
+        missing_category = [66, 68, 69, 71, 12, 45, 83, 26, 29, 30]
+        category = [x for x in range(1, 91) if not x in missing_category]
+        self.mapping = {k: v for k, v in zip(list(range(80)), category)}
 
+    def on_epoch_begin(self, data):
+        self.results = []
+
+    def on_batch_end(self, data):
+        seg_preds, = data['seg_preds'].numpy(),
+        cate_scores, cate_labels = data['cate_scores'].numpy(), data['cate_labels'].numpy()
+        image_ids, imsizes = data['image_id'].numpy(), data['imsize'].numpy()
+        for seg_pred, cate_score, cate_label, image_id, imsize in zip(seg_preds, cate_scores, cate_labels, image_ids, imsizes):
+            # remove the padded data due to batching
+            indices = cate_score > 0.01
+            seg_pred, cate_score, cate_label = seg_pred[indices], cate_score[indices], cate_label[indices]
+            if seg_pred.shape[0] == 0:
+                continue
+            seg_pred = np.transpose(seg_pred, axes=(1, 2, 0))  # [H, W, #objects]
+            # remove the padded data due to image resize
+            mask_h, mask_w, num_obj = seg_pred.shape
+            image_h, image_w = 4 * mask_h, 4 * mask_w
+            seg_pred = cv2.resize(seg_pred, (image_w, image_h))
+            if num_obj == 1:
+                seg_pred = seg_pred[..., np.newaxis]  # when there's only single object, resize will remove the channel
+            ori_h, ori_w = imsize
+            scale_ratio = min(image_h / ori_h, image_w / ori_w)
+            pad_h, pad_w = image_h - scale_ratio * ori_h, image_w - scale_ratio * ori_w
+            h_start, h_end = round(pad_h / 2), image_h - round(pad_h / 2)
+            w_start, w_end = round(pad_w / 2), image_w - round(pad_w / 2)
+            seg_pred = seg_pred[h_start:h_end, w_start:w_end, :]
+            # now reshape to original shape
+            seg_pred = cv2.resize(seg_pred, (ori_w, ori_h))
+            if num_obj == 1:
+                seg_pred = seg_pred[..., np.newaxis]  # when there's only single object, resize will remove the channel
+            seg_pred = np.transpose(seg_pred, [2, 0, 1])  # [#objects, H, W]
+            seg_pred = np.uint8(np.where(seg_pred > 0.5, 1, 0))
+            for seg, score, label in zip(seg_pred, cate_score, cate_label):
+                result = {
+                    "image_id": image_id,
+                    "category_id": self.mapping[label],
+                    "score": score,
+                    "segmentation": mask_util.encode(np.array(seg[..., np.newaxis], order='F'))[0]
+                }
+                self.results.append(result)
         return data
 
+    def on_epoch_end(self, data):
+        mAP = 0.0
+        if self.results:
+            with Suppressor():
+                coco_results = self.coco_gt.loadRes(self.results)
+                cocoEval = COCOeval(self.coco_gt, coco_results, 'segm')
+                cocoEval.evaluate()
+                cocoEval.accumulate()
+                cocoEval.summarize()
+                mAP = cocoEval.stats[0]
+        data.write_with_log(self.outputs[0], mAP)
 
-def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
+
+def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.mkdtemp()):
     num_device = get_num_devices()
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
-        # train_data=train_ds,
+        train_data=train_ds,
         eval_data=val_ds,
         batch_size=num_device * batch_size_per_gpu,
         ops=[
             ReadImage(inputs="image", outputs="image"),
             MergeMask(inputs="mask", outputs="mask"),
+            GetImageSize(inputs="image", outputs="imsize", mode="eval"),
             LongestMaxSize(max_size=1024, image_in="image", mask_in="mask", bbox_in="bbox", bbox_params="coco"),
             PadIfNeeded(min_height=1024,
                         min_width=1024,
@@ -498,21 +562,21 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
                                      mode="train")),
             Resize(height=256, width=256, image_in='mask'),  # downscale mask by 1/4 for memory efficiency
             Gt2Target(inputs=("mask", "bbox"), outputs=("gt_match", "mask", "classes")),
-            Delete(keys=("bbox", "image_id"))
+            Delete(keys="bbox"),
+            Delete(keys="image_id", mode="train")
         ],
         pad_value=0,
         num_process=8 * num_device)
     init_lr = 1e-2 / 16 * batch_size
     model = fe.build(model_fn=lambda: solov2(input_shape=(1024, 1024, 3)),
-                     optimizer_fn=lambda: tf.optimizers.SGD(learning_rate=init_lr, momentum=0.9),
-                     weights_path="/raid/xiaomeng/Experiments/solov2/1_initial_run/save_dir/model_best_total_loss.h5")
+                     optimizer_fn=lambda: tf.optimizers.SGD(learning_rate=init_lr, momentum=0.9))
     network = fe.Network(ops=[
         Normalize(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
-        PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="!train"),
+        PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="eval"),
         Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
                 outputs=("seg_preds", "cate_scores", "cate_labels"),
-                mode="!train"),
+                mode="eval"),
         LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
         LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
         Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs=("l_c1", "l_s1")),
@@ -531,7 +595,9 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
     traces = [
         EpochScheduler(lr_schedule),
         BestModelSaver(model=model, save_dir=save_dir),
-        DebugEval(inputs=("seg_preds", "cate_scores", "cate_labels"), mode="eval")
+        COCOMaskmAP(data_dir=data_dir,
+                    inputs=("seg_preds", "cate_scores", "cate_labels", "image_id", "imsize"),
+                    mode="eval")
     ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
