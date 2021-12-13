@@ -179,6 +179,7 @@ def solov2(input_shape=(None, None, 3), num_classes=80):
     assert resnet50.layers[-1].name == "conv5_block3_out"
     C5 = resnet50.layers[-1].output
     P2, P3, P4, P5 = fpn(C2, C3, C4, C5)
+    pdb.set_trace()
     feat_seg = solov2_maskhead(P2, P3, P4, P5)  # [B, h/4, w/4, 256]
     feat_cls_list, feat_kernel_list = solov2_head(P2, P3, P4, P5, num_classes=num_classes)  # [B, grid, grid, 80], [B, grid, grid, 256]
     model = tf.keras.Model(inputs=inputs, outputs=[feat_seg, feat_cls_list, feat_kernel_list])
@@ -605,3 +606,8 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.m
                              traces=traces,
                              monitor_names=("cls_loss", "seg_loss"))
     return estimator
+
+
+if __name__ == "__main__":
+    model = solov2(input_shape=(1024, 1024, 3))
+    pdb.set_trace()
