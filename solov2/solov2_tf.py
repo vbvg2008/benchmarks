@@ -142,7 +142,7 @@ def solov2_head(P2, P3, P4, P5, num_classes=80):
         feature = tf.image.resize(feature, size=(grid_size, grid_size))
         feat_kernel, feat_cls = head_model(feature)
         feat_kernel_list.append(feat_kernel)
-        feat_cls_list.append(feat_cls)
+        feat_cls_list.append(tf.sigmoid(feat_cls))
     return feat_cls_list, feat_kernel_list
 
 
@@ -180,7 +180,6 @@ def solov2(input_shape=(None, None, 3), num_classes=80):
     assert resnet50.layers[-1].name == "conv5_block3_out"
     C5 = resnet50.layers[-1].output
     P2, P3, P4, P5 = fpn(C2, C3, C4, C5)
-    pdb.set_trace()
     feat_seg = solov2_maskhead(P2, P3, P4, P5)  # [B, h/4, w/4, 256]
     feat_cls_list, feat_kernel_list = solov2_head(P2, P3, P4, P5, num_classes=num_classes)  # [B, grid, grid, 80], [B, grid, grid, 256]
     model = tf.keras.Model(inputs=inputs, outputs=[feat_seg, feat_cls_list, feat_kernel_list])
@@ -338,7 +337,7 @@ class Solov2Loss(TensorOp):
         grid_object_map = tf.stack([feat_cls_gts, object_idx], axis=-1)
         # classification loss
         feat_cls_gts = tf.one_hot(tf.cast(feat_cls_gts, tf.int32), depth=self.num_class + 1)[..., 1:]
-        cls_loss = self.focal_loss(tf.sigmoid(feat_cls), feat_cls_gts)
+        cls_loss = self.focal_loss(feat_cls, feat_cls_gts)
         return cls_loss, grid_object_map
 
     def focal_loss(self, pred, gt, alpha=0.25, gamma=2.0):
@@ -371,7 +370,7 @@ class CombineLoss(TensorOp):
 
 class PointsNMS(TensorOp):
     def forward(self, data, state):
-        feat_cls_list = [self.points_nms(tf.sigmoid(x)) for x in data]
+        feat_cls_list = [self.points_nms(x) for x in data]
         return feat_cls_list
 
     def points_nms(self, x, kernel_size=2):
@@ -544,7 +543,7 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
-        train_data=train_ds,
+        # train_data=train_ds,
         eval_data=val_ds,
         batch_size=num_device * batch_size_per_gpu,
         ops=[
@@ -596,10 +595,10 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
     }
     traces = [
         EpochScheduler(lr_schedule),
-        BestModelSaver(model=model, save_dir=save_dir),
         COCOMaskmAP(data_dir=data_dir,
                     inputs=("seg_preds", "cate_scores", "cate_labels", "image_id", "imsize"),
-                    mode="eval")
+                    mode="eval"),
+        BestModelSaver(model=model, save_dir=save_dir, metric="mAP", save_best_mode="max")
     ]
     estimator = fe.Estimator(pipeline=pipeline,
                              network=network,
@@ -607,8 +606,3 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
                              traces=traces,
                              monitor_names=("cls_loss", "seg_loss"))
     return estimator
-
-
-if __name__ == "__main__":
-    model = solov2(input_shape=(1024, 1024, 3))
-    pdb.set_trace()

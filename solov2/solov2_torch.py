@@ -1,8 +1,10 @@
+import os
 import pdb
 import tempfile
 
 import cv2
 import numpy as np
+import pycocotools.mask as mask_util
 import torch
 import torch.nn as nn
 import torchvision
@@ -19,6 +21,10 @@ from fastestimator.op.numpyop.multivariate import HorizontalFlip, LongestMaxSize
 from fastestimator.op.numpyop.univariate import ReadImage
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.op.tensorop.tensorop import LambdaOp, TensorOp
+from fastestimator.schedule import EpochScheduler
+from fastestimator.trace.adapt import LRScheduler
+from fastestimator.trace.io import BestModelSaver
+from fastestimator.trace.trace import Trace
 from fastestimator.util import Suppressor, get_num_devices
 
 
@@ -390,6 +396,7 @@ class Predict(TensorOp):
         super().__init__(inputs=inputs, outputs=outputs, mode=mode)
         self.score_threshold = score_threshold
         self.strides = strides
+        self.post_nms_k = 100
 
     def forward(self, data, state):
         feat_seg, feat_cls_list, feat_kernel_list = data
@@ -420,7 +427,10 @@ class Predict(TensorOp):
         # next calculate the mask
         kernel_preds = kernel_preds[..., None, None]  # c_out, c_in, k_h, k_w
         seg_preds = seg_preds.unsqueeze(0)  # B, C, H, W
-        seg_preds = torch.sigmoid(nn.functional.conv2d(seg_preds, kernel_preds))[0]
+        if select_row.size(0) > 0:
+            seg_preds = torch.sigmoid(nn.functional.conv2d(seg_preds, kernel_preds))[0]
+        else:
+            seg_preds = torch.zeros(0, seg_preds.size(2), seg_preds.size(3), device=seg_preds.device)
         seg_masks = torch.where(seg_preds > 0.5, 1.0, 0.0)
         # then filter masks based on strides
         mask_sum = seg_masks.sum([1, 2])
@@ -430,8 +440,125 @@ class Predict(TensorOp):
         # scale the category score by mask confidence then matrix nms
         mask_scores = torch.sum(seg_preds * seg_masks, dim=[1, 2]) / mask_sum
         cate_scores = cate_scores * mask_scores
-        seg_preds, cate_scores, cate_labels = self.matrix_nms(seg_preds, seg_masks, cate_labels, cate_scores, mask_sum)
+        if seg_preds.size(0) > 0:
+            seg_preds, cate_scores, cate_labels = self.matrix_nms(seg_preds, seg_masks, cate_labels, cate_scores, mask_sum)
+        # pad output for batch shape consistency
+        num_selected = seg_preds.size(0)
+        seg_preds = nn.functional.pad(seg_preds, pad=(0, 0, 0, 0, 0, self.post_nms_k - num_selected))
+        cate_scores = nn.functional.pad(cate_scores, pad=(0, self.post_nms_k - num_selected))
+        cate_labels = nn.functional.pad(cate_labels, pad=(0, self.post_nms_k - num_selected))
         return seg_preds, cate_scores, cate_labels
+
+    def matrix_nms(self, seg_preds, seg_masks, cate_labels, cate_scores, mask_sum, pre_nms_k=500):
+        # first select top k category scores
+        num_selected = min(pre_nms_k, cate_scores.size(0))
+        indices = torch.argsort(cate_scores, descending=True)[:num_selected]
+        seg_preds, seg_masks, mask_sum = seg_preds[indices], seg_masks[indices], mask_sum[indices]
+        cate_labels, cate_scores = cate_labels[indices], cate_scores[indices]
+        # calculate iou between different masks
+        seg_masks = seg_masks.view(seg_masks.size(0), -1)
+        intersection = torch.mm(seg_masks, seg_masks.transpose(1, 0))
+        mask_sum = mask_sum.unsqueeze(0).expand(num_selected, -1)
+        union = mask_sum + mask_sum.transpose(1, 0) - intersection
+        iou = intersection / union
+        iou = torch.triu(iou, diagonal=1)
+        # iou decay and compensation
+        labels_match = cate_labels.unsqueeze(0).expand(num_selected, -1)
+        labels_match = torch.where(labels_match == labels_match.transpose(1, 0), 1.0, 0.0)
+        labels_match = torch.triu(labels_match, diagonal=1)
+        decay_iou = iou * labels_match  # iou with any object from same class
+        compensate_iou, _ = decay_iou.max(dim=0)
+        compensate_iou = compensate_iou.unsqueeze(1).expand(-1, num_selected)
+        # matrix nms
+        decay_coefficient, _ = torch.min(torch.exp(-2 * decay_iou**2) / torch.exp(-2 * compensate_iou**2), dim=0)
+        cate_scores = cate_scores * decay_coefficient
+        cate_scores = torch.where(cate_scores >= 0.05, cate_scores, cate_scores - cate_scores)
+        num_selected = min(self.post_nms_k, cate_scores.size(0))
+        indices = torch.argsort(cate_scores, descending=True)[:num_selected]
+        seg_preds, cate_scores, cate_labels = seg_preds[indices], cate_scores[indices], cate_labels[indices]
+        return seg_preds, cate_scores, cate_labels
+
+
+def lr_schedule_warmup(step, init_lr):
+    if step < 1000:
+        lr = init_lr / 1000 * step
+    else:
+        lr = init_lr
+    return lr
+
+
+def lr_schedule_piece_wise(epoch, init_lr):
+    if epoch < 8:
+        lr = init_lr
+    elif epoch < 11:
+        lr = init_lr * 0.1
+    else:
+        lr = init_lr * 0.01
+    return lr
+
+
+class COCOMaskmAP(Trace):
+    def __init__(self, data_dir, inputs=None, outputs="mAP", mode=None):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        with Suppressor():
+            self.coco_gt = COCO(os.path.join(data_dir, "MSCOCO2017", "annotations", "instances_val2017.json"))
+        missing_category = [66, 68, 69, 71, 12, 45, 83, 26, 29, 30]
+        category = [x for x in range(1, 91) if not x in missing_category]
+        self.mapping = {k: v for k, v in zip(list(range(80)), category)}
+
+    def on_epoch_begin(self, data):
+        self.results = []
+
+    def on_batch_end(self, data):
+        seg_preds, = data['seg_preds'].numpy(),
+        cate_scores, cate_labels = data['cate_scores'].numpy(), data['cate_labels'].numpy()
+        image_ids, imsizes = data['image_id'].numpy(), data['imsize'].numpy()
+        for seg_pred, cate_score, cate_label, image_id, imsize in zip(seg_preds, cate_scores, cate_labels, image_ids, imsizes):
+            # remove the padded data due to batching
+            indices = cate_score > 0.01
+            seg_pred, cate_score, cate_label = seg_pred[indices], cate_score[indices], cate_label[indices]
+            if seg_pred.shape[0] == 0:
+                continue
+            seg_pred = np.transpose(seg_pred, axes=(1, 2, 0))  # [H, W, #objects]
+            # remove the padded data due to image resize
+            mask_h, mask_w, num_obj = seg_pred.shape
+            image_h, image_w = 4 * mask_h, 4 * mask_w
+            seg_pred = cv2.resize(seg_pred, (image_w, image_h))
+            if num_obj == 1:
+                seg_pred = seg_pred[..., np.newaxis]  # when there's only single object, resize will remove the channel
+            ori_h, ori_w = imsize
+            scale_ratio = min(image_h / ori_h, image_w / ori_w)
+            pad_h, pad_w = image_h - scale_ratio * ori_h, image_w - scale_ratio * ori_w
+            h_start, h_end = round(pad_h / 2), image_h - round(pad_h / 2)
+            w_start, w_end = round(pad_w / 2), image_w - round(pad_w / 2)
+            seg_pred = seg_pred[h_start:h_end, w_start:w_end, :]
+            # now reshape to original shape
+            seg_pred = cv2.resize(seg_pred, (ori_w, ori_h))
+            if num_obj == 1:
+                seg_pred = seg_pred[..., np.newaxis]  # when there's only single object, resize will remove the channel
+            seg_pred = np.transpose(seg_pred, [2, 0, 1])  # [#objects, H, W]
+            seg_pred = np.uint8(np.where(seg_pred > 0.5, 1, 0))
+            for seg, score, label in zip(seg_pred, cate_score, cate_label):
+                result = {
+                    "image_id": image_id,
+                    "category_id": self.mapping[label],
+                    "score": score,
+                    "segmentation": mask_util.encode(np.array(seg[..., np.newaxis], order='F'))[0]
+                }
+                self.results.append(result)
+        return data
+
+    def on_epoch_end(self, data):
+        mAP = 0.0
+        if self.results:
+            with Suppressor():
+                coco_results = self.coco_gt.loadRes(self.results)
+                cocoEval = COCOeval(self.coco_gt, coco_results, 'segm')
+                cocoEval.evaluate()
+                cocoEval.accumulate()
+                cocoEval.summarize()
+                mAP = cocoEval.stats[0]
+        data.write_with_log(self.outputs[0], mAP)
 
 
 def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
@@ -439,7 +566,7 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
-        # train_data=train_ds,
+        train_data=train_ds,
         eval_data=val_ds,
         batch_size=num_device * batch_size_per_gpu,
         ops=[
@@ -485,6 +612,20 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
                     outputs=("total_loss", "cls_loss", "seg_loss")),
         UpdateOp(model=model, loss_name="total_loss")
     ])
-
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, monitor_names=("cls_loss", "seg_loss"))
+    lr_schedule = {
+        1: LRScheduler(model=model, lr_fn=lambda step: lr_schedule_warmup(step, init_lr=init_lr)),
+        2: LRScheduler(model=model, lr_fn=lambda epoch: lr_schedule_piece_wise(epoch, init_lr=init_lr))
+    }
+    traces = [
+        EpochScheduler(lr_schedule),
+        COCOMaskmAP(data_dir=data_dir,
+                    inputs=("seg_preds", "cate_scores", "cate_labels", "image_id", "imsize"),
+                    mode="eval"),
+        BestModelSaver(model=model, save_dir=save_dir, metric="mAP", save_best_mode="max")
+    ]
+    estimator = fe.Estimator(pipeline=pipeline,
+                             network=network,
+                             epochs=epochs,
+                             traces=traces,
+                             monitor_names=("cls_loss", "seg_loss"))
     return estimator
