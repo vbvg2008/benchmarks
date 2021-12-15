@@ -2,11 +2,15 @@ import pdb
 import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+from scipy.ndimage.measurements import center_of_mass
+
+import fastestimator as fe
 from fastestimator.backend import to_tensor
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
@@ -16,9 +20,6 @@ from fastestimator.op.numpyop.univariate import ReadImage
 from fastestimator.op.tensorop.model import ModelOp, UpdateOp
 from fastestimator.op.tensorop.tensorop import LambdaOp, TensorOp
 from fastestimator.util import Suppressor, get_num_devices
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from scipy.ndimage.measurements import center_of_mass
 
 
 def pad_with_coord(data):
@@ -384,12 +385,61 @@ class CombineLoss(TensorOp):
         return mean_cls_loss + mean_seg_loss, mean_cls_loss, mean_seg_loss
 
 
-def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.mkdtemp()):
+class Predict(TensorOp):
+    def __init__(self, inputs, outputs, mode=None, score_threshold=0.1, strides=[8.0, 8.0, 16.0, 32.0, 32.0]):
+        super().__init__(inputs=inputs, outputs=outputs, mode=mode)
+        self.score_threshold = score_threshold
+        self.strides = strides
+
+    def forward(self, data, state):
+        feat_seg, feat_cls_list, feat_kernel_list = data
+        strides = [
+            torch.full((x.size(2) * x.size(3), ), s, device=x.device) for s, x in zip(self.strides, feat_cls_list)
+        ]
+        batch_size, num_class = feat_cls_list[0].size(0), feat_cls_list[0].size(1)
+        kernel_dim = feat_kernel_list[0].size(1)
+        feat_cls = torch.cat([x.view(batch_size, num_class, -1) for x in feat_cls_list], axis=-1)
+        feat_kernel = torch.cat([x.view(batch_size, kernel_dim, -1) for x in feat_kernel_list], axis=-1)
+        strides = torch.cat(strides, axis=0)
+        seg_preds, cate_scores, cate_labels = [], [], []
+        for feat_cls_s, feat_seg_s, feat_kernel_s in zip(feat_cls, feat_seg, feat_kernel):
+            seg_pred, cate_score, cate_label = self.predict_sample(feat_cls_s, feat_seg_s, feat_kernel_s, strides)
+            seg_preds.append(seg_pred)
+            cate_scores.append(cate_score)
+            cate_labels.append(cate_label)
+        return torch.stack(seg_preds), torch.stack(cate_scores), torch.stack(cate_labels)
+
+    def predict_sample(self, cate_preds, seg_preds, kernel_preds, strides):
+        cate_preds = cate_preds.transpose(1, 0)
+        kernel_preds = kernel_preds.transpose(1, 0)
+        # first filter class prediction by score_threshold
+        select_row, select_col = torch.where(cate_preds > self.score_threshold)
+        cate_labels = select_col
+        kernel_preds = kernel_preds[select_row]
+        cate_scores, strides = cate_preds[select_row, select_col], strides[select_row]
+        # next calculate the mask
+        kernel_preds = kernel_preds[..., None, None]  # c_out, c_in, k_h, k_w
+        seg_preds = seg_preds.unsqueeze(0)  # B, C, H, W
+        seg_preds = torch.sigmoid(nn.functional.conv2d(seg_preds, kernel_preds))[0]
+        seg_masks = torch.where(seg_preds > 0.5, 1.0, 0.0)
+        # then filter masks based on strides
+        mask_sum = seg_masks.sum([1, 2])
+        seg_preds, seg_masks = seg_preds[mask_sum > strides], seg_masks[mask_sum > strides]
+        cate_labels, cate_scores = cate_labels[mask_sum > strides], cate_scores[mask_sum > strides]
+        mask_sum = mask_sum[mask_sum > strides]
+        # scale the category score by mask confidence then matrix nms
+        mask_scores = torch.sum(seg_preds * seg_masks, dim=[1, 2]) / mask_sum
+        cate_scores = cate_scores * mask_scores
+        seg_preds, cate_scores, cate_labels = self.matrix_nms(seg_preds, seg_masks, cate_labels, cate_scores, mask_sum)
+        return seg_preds, cate_scores, cate_labels
+
+
+def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
     num_device = get_num_devices()
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     batch_size = num_device * batch_size_per_gpu
     pipeline = fe.Pipeline(
-        train_data=train_ds,
+        # train_data=train_ds,
         eval_data=val_ds,
         batch_size=num_device * batch_size_per_gpu,
         ops=[
@@ -421,9 +471,9 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.m
         NormalizePermute(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
         PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="eval"),
-        # Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
-        #         outputs=("seg_preds", "cate_scores", "cate_labels"),
-        #         mode="eval"),
+        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
+                outputs=("seg_preds", "cate_scores", "cate_labels"),
+                mode="eval"),
         LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
         LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
         Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs=("l_c1", "l_s1")),
@@ -436,5 +486,5 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.m
         UpdateOp(model=model, loss_name="total_loss")
     ])
 
-    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs)
+    estimator = fe.Estimator(pipeline=pipeline, network=network, epochs=epochs, monitor_names=("cls_loss", "seg_loss"))
     return estimator

@@ -14,11 +14,16 @@ import pdb
 import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import pycocotools.mask as mask_util
 import tensorflow as tf
 import tensorflow_addons as tfa
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+from scipy.ndimage.measurements import center_of_mass
+from tensorflow.keras import layers, regularizers
+
+import fastestimator as fe
 from fastestimator.dataset.data import mscoco
 from fastestimator.op.numpyop import Delete, NumpyOp
 from fastestimator.op.numpyop.meta import Sometimes
@@ -31,10 +36,6 @@ from fastestimator.trace.adapt import LRScheduler
 from fastestimator.trace.io import BestModelSaver
 from fastestimator.trace.trace import Trace
 from fastestimator.util import Suppressor, get_num_devices
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from scipy.ndimage.measurements import center_of_mass
-from tensorflow.keras import layers, regularizers
 
 
 def fpn(C2, C3, C4, C5):
@@ -538,7 +539,7 @@ class COCOMaskmAP(Trace):
         data.write_with_log(self.outputs[0], mAP)
 
 
-def get_estimator(data_dir, epochs=12, batch_size_per_gpu=2, save_dir=tempfile.mkdtemp()):
+def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.mkdtemp()):
     num_device = get_num_devices()
     train_ds, val_ds = mscoco.load_data(root_dir=data_dir, load_masks=True)
     batch_size = num_device * batch_size_per_gpu
