@@ -306,9 +306,9 @@ class PointsNMS(TensorOp):
         feat_cls_list = [self.points_nms(x) for x in data]
         return feat_cls_list
 
-    def points_nms(self, x, kernel_size=2):
+    def points_nms(self, x):
         x_max_pool = nn.functional.max_pool2d(x, kernel_size=2, stride=1, padding=1)[..., :-1, :-1]
-        x[x_max_pool != x] = 0.0
+        x = torch.where(x == x_max_pool, x, torch.zeros_like(x))
         return x
 
 
@@ -356,7 +356,7 @@ class Solov2Loss(TensorOp):
         grid_object_map = torch.stack([feat_cls_gts, object_idx.type(feat_cls_gts.dtype)], dim=-1)
         # classification loss
         feat_cls_gts = nn.functional.one_hot(feat_cls_gts.long(), num_classes=self.num_class + 1)[..., 1:]
-        cls_loss = self.focal_loss(feat_cls, feat_cls_gts.type(feat_cls.dtype))
+        cls_loss = self.focal_loss(feat_cls.permute(1, 2, 0), feat_cls_gts.type(feat_cls.dtype))
         return cls_loss, grid_object_map
 
     def focal_loss(self, pred, gt, alpha=0.25, gamma=2.0):
@@ -597,10 +597,6 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
     network = fe.Network(ops=[
         NormalizePermute(inputs="image", outputs="image", mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ModelOp(model=model, inputs="image", outputs=("feat_seg", "feat_cls_list", "feat_kernel_list")),
-        PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="eval"),
-        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
-                outputs=("seg_preds", "cate_scores", "cate_labels"),
-                mode="eval"),
         LambdaOp(fn=lambda x: x, inputs="feat_cls_list", outputs=("cls1", "cls2", "cls3", "cls4", "cls5")),
         LambdaOp(fn=lambda x: x, inputs="feat_kernel_list", outputs=("k1", "k2", "k3", "k4", "k5")),
         Solov2Loss(0, 40, inputs=("mask", "classes", "gt_match", "feat_seg", "cls1", "k1"), outputs=("l_c1", "l_s1")),
@@ -610,7 +606,11 @@ def get_estimator(data_dir, epochs=12, batch_size_per_gpu=8, save_dir=tempfile.m
         Solov2Loss(4, 12, inputs=("mask", "classes", "gt_match", "feat_seg", "cls5", "k5"), outputs=("l_c5", "l_s5")),
         CombineLoss(inputs=("l_c1", "l_s1", "l_c2", "l_s2", "l_c3", "l_s3", "l_c4", "l_s4", "l_c5", "l_s5"),
                     outputs=("total_loss", "cls_loss", "seg_loss")),
-        UpdateOp(model=model, loss_name="total_loss")
+        UpdateOp(model=model, loss_name="total_loss"),
+        PointsNMS(inputs="feat_cls_list", outputs="feat_cls_list", mode="eval"),
+        Predict(inputs=("feat_seg", "feat_cls_list", "feat_kernel_list"),
+                outputs=("seg_preds", "cate_scores", "cate_labels"),
+                mode="eval")
     ])
     lr_schedule = {
         1: LRScheduler(model=model, lr_fn=lambda step: lr_schedule_warmup(step, init_lr=init_lr)),
