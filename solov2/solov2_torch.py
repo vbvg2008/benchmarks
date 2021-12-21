@@ -356,11 +356,10 @@ class Solov2Loss(TensorOp):
         grid_object_map = torch.stack([feat_cls_gts, object_idx.type(feat_cls_gts.dtype)], dim=-1)
         # classification loss
         feat_cls_gts = nn.functional.one_hot(feat_cls_gts.long(), num_classes=self.num_class + 1)[..., 1:]
-        cls_loss = self.focal_loss(feat_cls.permute(1, 2, 0), feat_cls_gts.type(feat_cls.dtype))
+        cls_loss = self.focal_loss(feat_cls.permute(1, 2, 0).reshape(-1), feat_cls_gts.type(feat_cls.dtype).view(-1))
         return cls_loss, grid_object_map
 
     def focal_loss(self, pred, gt, alpha=0.25, gamma=2.0):
-        pred, gt = pred.view(-1), gt.view(-1)
         anchor_obj_count = torch.count_nonzero(gt).type(pred.dtype)
         alpha_factor = torch.ones_like(gt) * alpha
         alpha_factor = torch.where(gt == 1, alpha_factor, 1 - alpha_factor)
