@@ -1,19 +1,26 @@
 import pdb
 import random
+import tempfile
 
 import cv2
-import fastestimator as fe
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
-from fastestimator.dataset.data import cifair10, mnist
-from fastestimator.op.numpyop import NumpyOp
-from fastestimator.op.numpyop.multivariate import GridDistortion, HorizontalFlip, RandomResizedCrop, Resize
-from fastestimator.op.numpyop.univariate import CoarseDropout, ColorJitter, GaussianBlur, GaussianNoise, Minmax, \
-    RandomRain, RandomShapes, RandomSnow, ReadImage
+from matplotlib import image
 from PIL import Image, ImageOps, ImageTransform
 from tensorflow.keras import layers
 from torch.utils.data import Dataset
+
+import fastestimator as fe
+from fastestimator.dataset.data import cifair10, mnist
+from fastestimator.op.numpyop import Delete, NumpyOp
+from fastestimator.op.numpyop.meta import OneOf
+from fastestimator.op.numpyop.multivariate import GridDistortion, HorizontalFlip, RandomResizedCrop, Resize
+from fastestimator.op.numpyop.univariate import CoarseDropout, ColorJitter, GaussianBlur, RandomRain, RandomShapes, \
+    RandomSnow
+from fastestimator.op.tensorop.loss import MeanSquaredError
+from fastestimator.op.tensorop.model import ModelOp, UpdateOp
+from fastestimator.trace.io import ModelSaver
 
 
 class RandomPair(Dataset):
@@ -309,6 +316,7 @@ def encoder(input_size=(None, None, 3)):
     model = tf.keras.Model(inputs=inputs, outputs=x)
     return model
 
+
 def decoder(encoder, input_size=(None, None, 3), em_dim=512):
     img2_orig = layers.Input(shape=input_size)
     height = tf.shape(img2_orig)[1]
@@ -319,7 +327,7 @@ def decoder(encoder, input_size=(None, None, 3), em_dim=512):
     vec2_aug = vec2_orig + vec_diff_2
     vec2_spatial = layers.Dense(1024)(vec2_aug)
     x = layers.Reshape(target_shape=(2, 2, 256))(vec2_spatial)
-    x = tf.image.resize(x, size=(width//8, height//8)) # resize to the original feature size
+    x = tf.image.resize(x, size=(width // 8, height // 8))  # resize to the original feature size
     # stage 4
     x = layers.Conv2D(256, 3, padding='same', activation='relu')(x)
     x = layers.Conv2D(256, 3, padding='same', activation='relu')(x)
@@ -336,8 +344,9 @@ def decoder(encoder, input_size=(None, None, 3), em_dim=512):
     x = layers.Conv2D(32, 3, padding='same', activation='relu')(x)
     x = layers.Conv2D(32, 3, padding='same', activation='relu')(x)
     # to rgb
-    x = layers.Conv2D(3, 1, activation='sigmoid')(x)
+    x = layers.Conv2D(3, 1, activation='tanh')(x)
     return tf.keras.Model(inputs=[aug_embedding, img2_orig], outputs=x)
+
 
 #TODO: maybe do not need to extra dense, directly make aug_embedding = vec_aug - vec_diff
 def aug_embedding(em_dim=512):
@@ -350,19 +359,75 @@ def aug_embedding(em_dim=512):
     vec_diff_1 = vec1_aug - vec1_orig
     aug_embedding = layers.Dense(em_dim)(vec_diff_1)
     model_dec = decoder(model_enc, em_dim=em_dim)
-    img2_aug = model_dec(aug_embedding, img2_orig)
+    img2_aug = model_dec([aug_embedding, img2_orig])
     model_overall = tf.keras.Model(inputs=[img1_orig, img1_aug, img2_orig], outputs=img2_aug)
     return model_overall, model_enc, model_dec
 
 
-def get_estimator():
-    train_data, _ = cifair10.load_data()
-    train_data = RandomPair(train_data)
-    pdb.set_trace()
+class ToColor(NumpyOp):
+    def forward(self, data, state):
+        return [self.convert(x) for x in data]
+
+    def convert(self, data):
+        return np.stack([data, data, data], axis=-1)
 
 
-if __name__ == "__main__":
-    model = encoder()
-    pdb.set_trace()
-    data = np.random.rand(1, 32, 32, 3)
-    data2 = np.random.rand(1, 256, 256, 3)
+class Rescale(NumpyOp):
+    def forward(self, data, state):
+        return [self.convert(x) for x in data]
+
+    def convert(self, data):
+        return np.float32(data / 255)
+
+
+def get_estimator(save_dir=tempfile.mkdtemp(), epochs=10):
+    train_data_mnist, eval_data_mnist = mnist.load_data()
+    train_data_mnist, eval_data_mnist = RandomPair(train_data_mnist), RandomPair(eval_data_mnist)
+    train_data_cifar, eval_data_cifar = cifair10.load_data()
+    train_data_cifar, eval_data_cifar = RandomPair(train_data_cifar), RandomPair(eval_data_cifar)
+    aug_options = [
+        Solarize(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        Posterize(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        RandomShape(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        GaussianBlurring(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        ColorJittering(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        Cutout(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug"), image_w=32, image_h=32),
+        RandomEffectRain(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        RandomEffectSnow(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        MyHorizontalFlip(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        Rotate(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        ShearX(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        ShearY(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        TranslateX(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        TranslateY(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug")),
+        Scale(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug"), image_w=32, image_h=32),
+        MyGridDistort(inputs=("x1", "x2"), outputs=("x1_aug", "x2_aug"))
+    ]
+    pipeline = fe.Pipeline(
+        train_data={
+            "mnist": train_data_mnist, "cifar": train_data_cifar
+        },
+        eval_data={
+            "mnist": eval_data_mnist, "cifar": eval_data_cifar
+        },
+        batch_size=256,
+        ops=[
+            ToColor(inputs=("x1", "x2"), outputs=("x1", "x2"), ds_id="mnist"),
+            Resize(height=32, width=32, image_in="x1", image_out="x1", ds_id="mnist"),
+            Resize(height=32, width=32, image_in="x2", image_out="x2", ds_id="mnist"),
+            OneOf(*aug_options),
+            Rescale(inputs=("x1", "x1_aug", "x2", "x2_aug"), outputs=("x1", "x1_aug", "x2", "x2_aug")),
+            Delete(keys=("y1", "y2"))
+        ])
+    model, enc, dec = fe.build(model_fn=aug_embedding, optimizer_fn=("adam", None, None))
+    network = fe.Network(ops=[
+        ModelOp(model=model, inputs=("x1", "x1_aug", "x2"), outputs="x2_aug_pred"),
+        MeanSquaredError(inputs=("x2_aug_pred", "x2_aug"), outputs="mse_loss"),
+        UpdateOp(model=model, loss_name="mse_loss")
+    ])
+    estimator = fe.Estimator(pipeline=pipeline,
+                             network=network,
+                             epochs=epochs,
+                             train_steps_per_epoch=1000,
+                             traces=ModelSaver(model=model, save_dir=save_dir, frequency=epochs))
+    return estimator
