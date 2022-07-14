@@ -28,24 +28,27 @@ def create_val_dirs(mapping_file, val_image_dir, val_dir):
             os.mkdir(target_folder_path)
         target_path = os.path.join(target_folder_path, file)
         copyfile(source_path, target_path)
-        if idx % 100 ==0:
+        if idx % 100 == 0:
             print(idx)
 
 
-# create_val_dirs(mapping_file="mapping.json", val_image_dir="/raid/shared_data/ImageNet2012/val_images/", val_dir="/raid/shared_data/ImageNet2012/val/")
+create_val_dirs(mapping_file="mapping.json",
+                val_image_dir="/raid/shared_data/ImageNet2012_tar/eval",
+                val_dir="/raid/shared_data/ImageNet2012/val")
 
-def extract_train_files(train_tar_dir, train_dir):
-    tar_files = os.listdir(train_tar_dir)
-    for idx, tar_file in enumerate(tar_files):
-        folder_name = os.path.splitext(tar_file)[0]
-        tar_path = os.path.join(train_tar_dir, tar_file)
-        extract_path = os.path.join(train_dir, folder_name)
-        if not os.path.exists(extract_path):
-            os.mkdir(extract_path)
-            # extract
-            with tarfile.open(tar_path) as tar:
-                tar.extractall(extract_path)
-            if idx % 10 == 0:
-                print(idx)
+# def extract_train_files(train_tar_dir, train_dir):
+#     tar_files = os.listdir(train_tar_dir)
+#     for idx, tar_file in enumerate(tar_files):
+#         folder_name = os.path.splitext(tar_file)[0]
+#         tar_path = os.path.join(train_tar_dir, tar_file)
+#         extract_path = os.path.join(train_dir, folder_name)
+#         if not os.path.exists(extract_path):
+#             os.mkdir(extract_path)
+#             # extract
+#             with tarfile.open(tar_path) as tar:
+#                 tar.extractall(extract_path)
+#             if idx % 10 == 0:
+#                 print(idx)
 
-extract_train_files(train_tar_dir="/data/shared_data/ImageNet2012/train_tars/", train_dir="/data/shared_data/ImageNet2012/train/")
+# extract_train_files(train_tar_dir="/raid/shared_data/ImageNet2012_tar/train",
+#                     train_dir="/raid/shared_data/ImageNet2012/train/")
