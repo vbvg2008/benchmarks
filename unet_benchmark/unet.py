@@ -10,7 +10,7 @@ from tensorflow.keras.layers import Conv2D, Input, MaxPooling2D, UpSampling2D, c
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 
 
-def timeit(f, num_runs=1000, warmup=True):
+def timeit(f, num_runs=500, warmup=True):
     times = []
     if warmup:
         f()  # first call the function for a good luck
@@ -131,7 +131,7 @@ def UNet(input_shape=(128, 128, 1),
 class GPUMemory(object):
     def __enter__(self) -> None:
         self.process = subprocess.Popen(
-            "while true; do nvidia-smi -i 0 --query-gpu=memory.used  --format=csv,noheader; sleep .1; done",
+            "while true; do nvidia-smi -i 0 --query-gpu=memory.used  --format=csv,noheader; sleep .5; done",
             shell=True,
             stdout=subprocess.PIPE)
         return self
@@ -149,13 +149,14 @@ def single_inference(model, data):
     return output
 
 
-if __name__ == "__main__":
-    output_channel = (1, 1, 1, 1, 1, 1, 1)
-    c_news = (32, 32, 32, 32, 32, 32, 32)
-    decs = (64, 64, 64, 64, 64, 64, 64)
-    model = UNet(input_shape=(512, 512, 1), output_channel=output_channel, c_news=c_news, decs=decs)
-
+def fastestimator_run(num_tasks=5, c_enc=32, c_dec=128):
+    print("num_tasks: {}".format(num_tasks))
+    print("c_enc: {}".format(c_enc))
+    print("c_dec: {}".format(c_dec))
+    c_news = tuple(c_enc for _ in range(num_tasks))
+    decs = tuple(c_dec for _ in range(num_tasks))
+    model = UNet(input_shape=(512, 512, 1), output_channel=(1, 1, 1, 1, 1, 1, 1), c_news=c_news, decs=decs)
     data = np.random.rand(1, 512, 512, 1).astype("float32")
     with GPUMemory() as gpu_m:
-        timeit(f=lambda: single_inference(model=model, data=data))
+        timeit(f=lambda: single_inference(model=model, data=data), num_runs=500)
     print("max memory usage: {} MiB".format(gpu_m.max_usage))
