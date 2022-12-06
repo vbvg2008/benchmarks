@@ -53,11 +53,11 @@ def benchmark_normal(model, num_samples=5000):
 
 if __name__ == "__main__":
     model = ConditionalModel()
-    benchmark(model, p=0.1)  # 1.928 ms on A100
-    benchmark(model, p=0.3)  # 2.697 ms on A100
-    benchmark(model, p=0.5)  # 4.034 ms on A100
-    benchmark(model, p=0.7)  # 5.895 ms on A100
-    benchmark(model, p=0.9)  # 7.059 ms on A100
+    benchmark(model, p=0.1)  # 1.928 ms on A100, 2.81 ms on M60
+    benchmark(model, p=0.3)  # 2.697 ms on A100, 4.71 ms on M60
+    benchmark(model, p=0.5)  # 4.034 ms on A100, 7.29 ms on M60
+    benchmark(model, p=0.7)  # 5.895 ms on A100, 11.97 ms on M60
+    benchmark(model, p=0.9)  # 7.059 ms on A100, 13.88 ms on M60
 
     # benchmark normal condition
     model2 = tf.keras.applications.ResNet50(weights=None, include_top=True)
